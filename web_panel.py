@@ -812,6 +812,9 @@ def test_telegram_api():
             return jsonify({'success': False, 'message': 'Session dosyası kullanımda! Lütfen birkaç saniye bekleyip tekrar deneyin.'})
         return jsonify({'success': False, 'message': f'Test hatası: {error_msg}'})
 
+# Geçici phone_code_hash saklama (memory'de)
+phone_code_hashes = {}
+
 @app.route('/api/telegram-login', methods=['POST'])
 def telegram_login():
     """Telegram'a giriş yap"""
@@ -840,9 +843,17 @@ def telegram_login():
                 if action == 'send_code':
                     # Kod gönder
                     try:
-                        await client.send_code_request(phone)
-                        # Session'ı kaydet (kod gönderme bilgisi için)
+                        # send_code_request bir SentCode objesi döner, içinde phone_code_hash var
+                        sent_code = await client.send_code_request(phone)
+                        phone_code_hash = sent_code.phone_code_hash
+                        
+                        # phone_code_hash'i geçici olarak sakla (memory'de)
+                        phone_code_hashes[phone] = phone_code_hash
+                        print(f"Kod gönderildi, phone_code_hash saklandı: {phone_code_hash[:10]}...")
+                        
+                        # Session'ı kaydet (phone_code_hash session'a kaydedilir)
                         client.session.save()
+                        # Bağlantıyı kapat ama session dosyası kalacak
                         await client.disconnect()
                         return {'success': True, 'message': 'Kod gönderildi! Telefon numaranıza gelen kodu girin.'}
                     except Exception as e:
@@ -867,8 +878,39 @@ def telegram_login():
                         return {'success': False, 'message': 'Kod gerekli!'}
                     
                     try:
-                        # Kod doğrula
-                        result = await client.sign_in(phone, code)
+                        # Önce bağlan
+                        await client.connect()
+                        
+                        # Eğer client zaten yetkilendirilmişse, direkt başarılı dön
+                        if await client.is_user_authorized():
+                            print("Zaten giriş yapılmış")
+                            await client.disconnect()
+                            return {'success': True, 'message': 'Zaten giriş yapılmış!', 'requires_password': False}
+                        
+                        # phone_code_hash'i al (memory'den veya session'dan)
+                        phone_code_hash = phone_code_hashes.get(phone)
+                        if not phone_code_hash:
+                            # Session'dan yüklemeyi dene
+                            print(f"phone_code_hash memory'de bulunamadı, session'dan yükleniyor...")
+                            # Telethon otomatik olarak session'dan yükler, ama manuel de deneyebiliriz
+                            try:
+                                result = await client.sign_in(phone, code)
+                            except Exception as sign_in_error:
+                                error_msg = str(sign_in_error)
+                                if 'phone_code_hash' in error_msg.lower():
+                                    print(f"phone_code_hash bulunamadı: {error_msg}")
+                                    await client.disconnect()
+                                    # phone_code_hash'i temizle
+                                    phone_code_hashes.pop(phone, None)
+                                    return {'success': False, 'message': 'Kod süresi dolmuş veya geçersiz. Lütfen yeni kod isteyin.'}
+                                raise
+                        else:
+                            # phone_code_hash ile kod doğrula
+                            print(f"phone_code_hash kullanılıyor: {phone_code_hash[:10]}...")
+                            result = await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
+                            # Başarılı oldu, phone_code_hash'i temizle
+                            phone_code_hashes.pop(phone, None)
+                        
                         # Session'ı kaydet
                         client.session.save()
                         # Bağlantıyı kapat (session dosyası kalacak)
