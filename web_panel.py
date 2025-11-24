@@ -153,6 +153,9 @@ def search_groups():
         return jsonify({'success': True, 'groups': groups})
     except Exception as e:
         error_msg = str(e)
+        print(f"search_groups endpoint hatası: {error_msg}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'message': f'Arama hatası: {error_msg}', 'groups': []})
 
 @app.route('/api/groups/add-by-username', methods=['POST'])
@@ -184,6 +187,9 @@ def add_group_by_username():
         return jsonify({'success': True, 'group': group})
     except Exception as e:
         error_msg = str(e)
+        print(f"add_group_by_username hatası: {error_msg}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'message': error_msg, 'group': None})
 
 async def search_groups_async(search_term):
@@ -193,6 +199,11 @@ async def search_groups_async(search_term):
         if not config['API_ID'] or not config['API_HASH']:
             raise Exception('API bilgileri eksik!')
         
+        # Session dosyası kontrolü
+        session_file = 'session.session'
+        if not os.path.exists(session_file):
+            raise Exception('Telegram hesabınıza giriş yapılmamış! Lütfen önce "Gruplar" sekmesinden "Telegram\'a Giriş Yap" butonuna tıklayarak giriş yapın.')
+        
         # Yeni client oluştur
         client = TelegramClient('session', config['API_ID'], config['API_HASH'])
         
@@ -200,7 +211,7 @@ async def search_groups_async(search_term):
             await client.connect()
             
             if not await client.is_user_authorized():
-                raise Exception('Telegram hesabınıza giriş yapılmamış!')
+                raise Exception('Telegram hesabınıza giriş yapılmamış! Lütfen önce "Gruplar" sekmesinden "Telegram\'a Giriş Yap" butonuna tıklayarak giriş yapın.')
             
             # Kullanıcının üye olduğu tüm grupları çek ve arama terimine göre filtrele
             groups = []
@@ -229,7 +240,9 @@ async def search_groups_async(search_term):
                 pass
                 
     except Exception as e:
-        raise Exception(f'Grup arama hatası: {str(e)}')
+        error_msg = str(e)
+        print(f"search_groups_async hatası: {error_msg}")
+        raise Exception(f'Grup arama hatası: {error_msg}')
 
 async def get_group_by_username_async(username):
     """Username'den grup bilgilerini çek"""
@@ -238,13 +251,18 @@ async def get_group_by_username_async(username):
         if not config['API_ID'] or not config['API_HASH']:
             raise Exception('API bilgileri eksik!')
         
+        # Session dosyası kontrolü
+        session_file = 'session.session'
+        if not os.path.exists(session_file):
+            raise Exception('Telegram hesabınıza giriş yapılmamış! Lütfen önce "Gruplar" sekmesinden "Telegram\'a Giriş Yap" butonuna tıklayarak giriş yapın.')
+        
         client = TelegramClient('session', config['API_ID'], config['API_HASH'])
         
         try:
             await client.connect()
             
             if not await client.is_user_authorized():
-                raise Exception('Telegram hesabınıza giriş yapılmamış!')
+                raise Exception('Telegram hesabınıza giriş yapılmamış! Lütfen önce "Gruplar" sekmesinden "Telegram\'a Giriş Yap" butonuna tıklayarak giriş yapın.')
             
             # Username'den entity'yi al
             try:
@@ -256,7 +274,11 @@ async def get_group_by_username_async(username):
                     'username': getattr(entity, 'username', username)
                 }
             except Exception as e:
-                raise Exception(f'Grup bulunamadı: {str(e)}')
+                error_msg = str(e)
+                if 'not found' in error_msg.lower() or 'could not find' in error_msg.lower():
+                    raise Exception(f'Grup/kanal bulunamadı: @{username} - Bu grup/kanal mevcut değil veya erişim izniniz yok.')
+                else:
+                    raise Exception(f'Grup bulunamadı: {error_msg}')
             
         finally:
             try:
@@ -265,7 +287,9 @@ async def get_group_by_username_async(username):
                 pass
                 
     except Exception as e:
-        raise Exception(f'Grup çekme hatası: {str(e)}')
+        error_msg = str(e)
+        print(f"get_group_by_username_async hatası: {error_msg}")
+        raise Exception(f'Grup çekme hatası: {error_msg}')
 
 async def fetch_groups():
     """Telegram gruplarını çek"""

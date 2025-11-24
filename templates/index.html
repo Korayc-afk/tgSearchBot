@@ -1269,6 +1269,9 @@
                                 addedCount++;
                             }
                         } else {
+                            const errorMsg = data.message || 'Bilinmeyen hata';
+                            console.error(`Grup ekleme hatası (${username}):`, errorMsg);
+                            console.error('Backend response:', data);
                             errorCount++;
                         }
                     } else {
@@ -1293,11 +1296,19 @@
                                 addedCount++;
                             }
                         } else {
+                            const errorMsg = data.message || 'Grup bulunamadı';
+                            console.error(`Grup arama hatası (${item}):`, errorMsg);
+                            console.error('Backend response:', data);
                             errorCount++;
                         }
                     }
                 } catch (error) {
-                    console.error('Grup ekleme hatası:', error);
+                    console.error('Grup ekleme hatası (network/exception):', error);
+                    console.error('Hata detayları:', {
+                        message: error.message,
+                        stack: error.stack,
+                        item: item
+                    });
                     errorCount++;
                 }
             }
@@ -1310,7 +1321,11 @@
                 showToast(`✅ ${addedCount} grup eklendi!${errorCount > 0 ? ` (${errorCount} hata)` : ''}`, 'success');
                 renderSelectedGroups();
             } else {
-                showToast(`❌ Hiçbir grup eklenemedi.${errorCount > 0 ? ` (${errorCount} hata)` : ''}`, 'error');
+                const errorMsg = errorCount > 0 
+                    ? `❌ Hiçbir grup eklenemedi. (${errorCount} hata) - Lütfen konsolu (F12) kontrol edin.`
+                    : '❌ Hiçbir grup eklenemedi.';
+                showToast(errorMsg, 'error', 10000);
+                console.error('Grup ekleme başarısız. Tüm hatalar yukarıda listelenmiştir.');
             }
         }
 
