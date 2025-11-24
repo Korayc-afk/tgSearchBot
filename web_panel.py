@@ -841,9 +841,19 @@ def telegram_login():
                     # Kod gönder
                     try:
                         await client.send_code_request(phone)
+                        # Session'ı kaydet (kod gönderme bilgisi için)
+                        client.session.save()
+                        await client.disconnect()
                         return {'success': True, 'message': 'Kod gönderildi! Telefon numaranıza gelen kodu girin.'}
                     except Exception as e:
                         error_msg = str(e)
+                        print(f"Kod gönderme hatası: {error_msg}")
+                        import traceback
+                        traceback.print_exc()
+                        try:
+                            await client.disconnect()
+                        except:
+                            pass
                         if 'PHONE_NUMBER_INVALID' in error_msg:
                             return {'success': False, 'message': 'Telefon numarası geçersiz! Format: +90XXXXXXXXXX'}
                         elif 'FLOOD_WAIT' in error_msg:
@@ -857,20 +867,35 @@ def telegram_login():
                         return {'success': False, 'message': 'Kod gerekli!'}
                     
                     try:
-                        await client.sign_in(phone, code)
-                        # Session otomatik kaydedilir, ama manuel de kaydedebiliriz
+                        # Kod doğrula
+                        result = await client.sign_in(phone, code)
+                        # Session'ı kaydet
                         client.session.save()
                         # Bağlantıyı kapat (session dosyası kalacak)
                         await client.disconnect()
                         # Session dosyasının varlığını kontrol et
                         session_file = f'{session_name}.session'
                         if os.path.exists(session_file):
+                            print(f"Session dosyası başarıyla kaydedildi: {session_file}")
                             return {'success': True, 'message': 'Giriş başarılı! Session kaydedildi.', 'requires_password': False}
                         else:
+                            print(f"UYARI: Session dosyası bulunamadı: {session_file}")
                             return {'success': False, 'message': 'Giriş başarılı ama session dosyası kaydedilemedi. Lütfen tekrar deneyin.'}
                     except Exception as e:
                         error_msg = str(e)
-                        if 'PASSWORD' in error_msg or 'password' in error_msg.lower() or '2FA' in error_msg:
+                        print(f"Kod doğrulama hatası: {error_msg}")
+                        import traceback
+                        traceback.print_exc()
+                        try:
+                            await client.disconnect()
+                        except:
+                            pass
+                        if 'PASSWORD' in error_msg or 'password' in error_msg.lower() or '2FA' in error_msg or 'SESSION_PASSWORD_NEEDED' in error_msg:
+                            # Session'ı kaydet (2FA için)
+                            try:
+                                client.session.save()
+                            except:
+                                pass
                             return {'success': True, 'message': 'İki faktörlü doğrulama gerekiyor', 'requires_password': True}
                         elif 'PHONE_CODE_INVALID' in error_msg:
                             return {'success': False, 'message': 'Kod geçersiz! Lütfen doğru kodu girin.'}

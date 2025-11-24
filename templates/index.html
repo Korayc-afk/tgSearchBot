@@ -1948,9 +1948,13 @@
                     }
                 } else {
                     statusDiv.innerHTML = `<div class="alert alert-error">❌ ${data.message}</div>`;
+                    console.error('Giriş hatası:', data);
+                    showToast(`❌ ${data.message}`, 'error');
                 }
             } catch (error) {
+                console.error('Giriş exception hatası:', error);
                 statusDiv.innerHTML = `<div class="alert alert-error">❌ Hata: ${error.message}</div>`;
+                showToast(`❌ Hata: ${error.message}`, 'error');
             }
         }
 
