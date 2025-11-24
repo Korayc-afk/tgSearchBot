@@ -1321,10 +1321,23 @@
                 showToast(`✅ ${addedCount} grup eklendi!${errorCount > 0 ? ` (${errorCount} hata)` : ''}`, 'success');
                 renderSelectedGroups();
             } else {
-                const errorMsg = errorCount > 0 
-                    ? `❌ Hiçbir grup eklenemedi. (${errorCount} hata) - Lütfen konsolu (F12) kontrol edin.`
-                    : '❌ Hiçbir grup eklenemedi.';
-                showToast(errorMsg, 'error', 10000);
+                // Hata mesajlarını kontrol et - eğer giriş yapılmamışsa özel mesaj göster
+                const hasLoginError = errorCount > 0;
+                let errorMsg = '';
+                if (hasLoginError) {
+                    errorMsg = `❌ Hiçbir grup eklenemedi. (${errorCount} hata)\n\n`;
+                    errorMsg += '🔐 Telegram\'a giriş yapmanız gerekiyor!\n';
+                    errorMsg += 'Lütfen "Gruplar" sekmesinden "Telegram\'a Giriş Yap" butonuna tıklayın.';
+                    // Giriş modalını otomatik aç
+                    setTimeout(() => {
+                        if (typeof showLoginModal === 'function') {
+                            showLoginModal();
+                        }
+                    }, 1000);
+                } else {
+                    errorMsg = '❌ Hiçbir grup eklenemedi. Lütfen konsolu (F12) kontrol edin.';
+                }
+                showToast(errorMsg, 'error', 15000);
                 console.error('Grup ekleme başarısız. Tüm hatalar yukarıda listelenmiştir.');
             }
         }

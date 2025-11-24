@@ -858,8 +858,16 @@ def telegram_login():
                     
                     try:
                         await client.sign_in(phone, code)
-                        # Başarılı giriş, session kaydedildi
-                        return {'success': True, 'message': 'Giriş başarılı!', 'requires_password': False}
+                        # Session otomatik kaydedilir, ama manuel de kaydedebiliriz
+                        client.session.save()
+                        # Bağlantıyı kapat (session dosyası kalacak)
+                        await client.disconnect()
+                        # Session dosyasının varlığını kontrol et
+                        session_file = f'{session_name}.session'
+                        if os.path.exists(session_file):
+                            return {'success': True, 'message': 'Giriş başarılı! Session kaydedildi.', 'requires_password': False}
+                        else:
+                            return {'success': False, 'message': 'Giriş başarılı ama session dosyası kaydedilemedi. Lütfen tekrar deneyin.'}
                     except Exception as e:
                         error_msg = str(e)
                         if 'PASSWORD' in error_msg or 'password' in error_msg.lower() or '2FA' in error_msg:
@@ -878,8 +886,16 @@ def telegram_login():
                     
                     try:
                         await client.sign_in(password=password)
-                        # Başarılı giriş, session kaydedildi
-                        return {'success': True, 'message': 'Giriş başarılı!'}
+                        # Session otomatik kaydedilir, ama manuel de kaydedebiliriz
+                        client.session.save()
+                        # Bağlantıyı kapat (session dosyası kalacak)
+                        await client.disconnect()
+                        # Session dosyasının varlığını kontrol et
+                        session_file = f'{session_name}.session'
+                        if os.path.exists(session_file):
+                            return {'success': True, 'message': 'Giriş başarılı! Session kaydedildi.'}
+                        else:
+                            return {'success': False, 'message': 'Giriş başarılı ama session dosyası kaydedilemedi. Lütfen tekrar deneyin.'}
                     except Exception as e:
                         error_msg = str(e)
                         if 'PASSWORD' in error_msg or 'password' in error_msg.lower():
@@ -903,10 +919,12 @@ def telegram_login():
             finally:
                 # Session'ı kaydetmek için disconnect etme (session otomatik kaydedilir)
                 try:
-                    # Sadece bağlantıyı kapat, session dosyası kalacak
+                    # Session'ı manuel olarak kaydet ve bağlantıyı kapat
                     if client.is_connected():
+                        client.session.save()
                         await client.disconnect()
-                except:
+                except Exception as e:
+                    print(f"Session kaydetme/disconnect hatası: {e}")
                     pass
         
         # Async fonksiyonu çalıştır
