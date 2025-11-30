@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Telegram Monitoring - Web Panel</title>
+    <title>Padişah Telegram Monitoring</title>
     <style>
         * {
             margin: 0;
@@ -32,17 +32,32 @@
             color: white;
             padding: 30px;
             text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .padisah-logo {
+            width: 60px;
+            height: 60px;
+            object-fit: contain;
         }
 
         .header-logo {
             width: 60px;
             height: 60px;
             border-radius: 10px;
-            margin: 0 auto 15px;
             object-fit: cover;
             box-shadow: 0 4px 12px rgba(0,0,0,0.2);
             border: 3px solid rgba(255,255,255,0.3);
-            display: block;
         }
 
         .header h1 {
@@ -459,9 +474,14 @@
 <body>
     <div class="container">
         <div class="header">
-            <img src="/s-l400.jpg" alt="Logo" class="header-logo">
-            <h1>📱 Telegram Monitoring Bot</h1>
-            <p>Grup mesajlarınızı izleyin ve bahsedilmelerinizi takip edin</p>
+            <div class="header-left">
+                <img src="/logoSeffaf.png" alt="Padişah Logo" class="padisah-logo">
+                <img src="/s-l400.jpg" alt="Logo" class="header-logo">
+            </div>
+            <div>
+                <h1>📱 Telegram Monitoring Bot</h1>
+                <p>Grup mesajlarınızı izleyin ve bahsedilmelerinizi takip edin</p>
+            </div>
         </div>
 
         <div class="content">

@@ -36,6 +36,11 @@ def serve_logo():
     """Logo dosyasını serve et"""
     return send_from_directory('.', 's-l400.jpg')
 
+@app.route('/logoSeffaf.png')
+def serve_logo_seffaf():
+    """Şeffaf logo dosyasını serve et"""
+    return send_from_directory('.', 'logoSeffaf.png')
+
 @app.route('/api/config', methods=['GET'])
 def get_config_api():
     """Config'i getir"""
