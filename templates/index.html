@@ -34,7 +34,7 @@
             text-align: center;
             display: flex;
             align-items: center;
-            justify-content: center;
+            justify-content: space-between;
             gap: 20px;
             flex-wrap: wrap;
         }
@@ -45,10 +45,18 @@
             gap: 15px;
         }
         
+        .header-right {
+            display: flex;
+            align-items: center;
+        }
+        
         .padisah-logo {
-            width: 60px;
-            height: 60px;
+            width: 80px;
+            height: 80px;
             object-fit: contain;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 5px;
         }
 
         .header-logo {
@@ -475,12 +483,14 @@
     <div class="container">
         <div class="header">
             <div class="header-left">
-                <img src="/logoSeffaf.png" alt="Padişah Logo" class="padisah-logo">
                 <img src="/s-l400.jpg" alt="Logo" class="header-logo">
             </div>
-            <div>
-                <h1>📱 Telegram Monitoring Bot</h1>
+            <div style="flex: 1; text-align: center;">
+                <h1>Telegram Monitoring Bot</h1>
                 <p>Grup mesajlarınızı izleyin ve bahsedilmelerinizi takip edin</p>
+            </div>
+            <div class="header-right">
+                <img src="/logoSeffaf.png" alt="Padişah Logo" class="padisah-logo">
             </div>
         </div>
 
