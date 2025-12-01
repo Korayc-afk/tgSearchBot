@@ -665,35 +665,32 @@
             </div>
 
 
-            <!-- Telegram Giriş Modal -->
+            <!-- Telegram Giriş Modal - Basitleştirilmiş -->
             <div id="login-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000; align-items: center; justify-content: center; flex-direction: column;">
                 <div style="background: white; padding: 30px; border-radius: 15px; max-width: 500px; width: 90%; box-shadow: 0 10px 40px rgba(0,0,0,0.3); position: relative;">
                     <button onclick="closeLoginModal()" style="position: absolute; top: 10px; right: 10px; background: none; border: none; font-size: 24px; cursor: pointer; color: #666;">×</button>
                     <h2 style="margin-bottom: 20px; color: #667eea;">🔐 Telegram'a Giriş Yap</h2>
-                    <div id="login-step-1">
-                        <p style="margin-bottom: 15px; color: #666;">Telefon numaranızı girin. Kod gönderilecektir.</p>
-                        <input type="text" id="login-phone" placeholder="+90XXXXXXXXXX" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box;">
+                    
+                    <div id="login-main-form">
+                        <p style="margin-bottom: 15px; color: #666;">Telefon numaranızı girin, kod otomatik gönderilecektir.</p>
+                        <input type="text" id="login-phone" placeholder="+90XXXXXXXXXX" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box;" onblur="autoSendCode()">
+                        
+                        <div id="code-section" style="display: none;">
+                            <p style="margin-bottom: 10px; color: #666; font-size: 14px;">Telefon numaranıza gönderilen kodu girin:</p>
+                            <input type="text" id="login-code" placeholder="12345" maxlength="5" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box; font-size: 18px; text-align: center; letter-spacing: 5px;">
+                        </div>
+                        
+                        <div id="password-section" style="display: none;">
+                            <p style="margin-bottom: 10px; color: #666; font-size: 14px;">İki faktörlü doğrulama şifrenizi girin:</p>
+                            <input type="password" id="login-password" placeholder="Şifre" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box;">
+                        </div>
+                        
                         <div style="display: flex; gap: 10px;">
-                            <button class="btn btn-primary" onclick="sendLoginCode()" style="flex: 1;">📱 Kod Gönder</button>
+                            <button class="btn btn-primary" onclick="simpleLogin()" id="login-btn" style="flex: 1;">Giriş Yap</button>
                             <button class="btn btn-secondary" onclick="closeLoginModal()">İptal</button>
                         </div>
                     </div>
-                    <div id="login-step-2" style="display: none;">
-                        <p style="margin-bottom: 15px; color: #666;">Telefon numaranıza gönderilen kodu girin:</p>
-                        <input type="text" id="login-code" placeholder="12345" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box; font-size: 18px; text-align: center; letter-spacing: 5px;">
-                        <div style="display: flex; gap: 10px;">
-                            <button class="btn btn-primary" onclick="verifyLoginCode()" style="flex: 1;">✅ Giriş Yap</button>
-                            <button class="btn btn-secondary" onclick="closeLoginModal()">İptal</button>
-                        </div>
-                    </div>
-                    <div id="login-step-password" style="display: none;">
-                        <p style="margin-bottom: 15px; color: #666;">İki faktörlü doğrulama şifrenizi girin:</p>
-                        <input type="password" id="login-password" placeholder="Şifre" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box;">
-                        <div style="display: flex; gap: 10px;">
-                            <button class="btn btn-primary" onclick="verifyLoginPassword()" style="flex: 1;">🔒 Doğrula</button>
-                            <button class="btn btn-secondary" onclick="closeLoginModal()">İptal</button>
-                        </div>
-                    </div>
+                    
                     <div id="login-status" style="margin-top: 15px;"></div>
                 </div>
             </div>
@@ -1898,24 +1895,36 @@
 
 
         // Telegram Giriş Modal Fonksiyonları
+        // Basitleştirilmiş giriş fonksiyonları
+        let codeSent = false;
+        let needsPassword = false;
+        
         function showLoginModal() {
             document.getElementById('login-modal').style.display = 'flex';
-            document.getElementById('login-step-1').style.display = 'block';
-            document.getElementById('login-step-2').style.display = 'none';
-            document.getElementById('login-step-password').style.display = 'none';
+            document.getElementById('login-main-form').style.display = 'block';
+            document.getElementById('code-section').style.display = 'none';
+            document.getElementById('password-section').style.display = 'none';
             document.getElementById('login-status').innerHTML = '';
+            document.getElementById('login-phone').value = '';
+            document.getElementById('login-code').value = '';
+            document.getElementById('login-password').value = '';
+            document.getElementById('login-btn').innerHTML = 'Giriş Yap';
+            codeSent = false;
+            needsPassword = false;
         }
 
         function closeLoginModal() {
             document.getElementById('login-modal').style.display = 'none';
+            codeSent = false;
+            needsPassword = false;
         }
-
-        async function sendLoginCode() {
+        
+        // Telefon numarası girildiğinde otomatik kod gönder
+        async function autoSendCode() {
             const phone = document.getElementById('login-phone').value.trim();
             const statusDiv = document.getElementById('login-status');
             
-            if (!phone) {
-                statusDiv.innerHTML = '<div class="alert alert-error">Lütfen telefon numarası girin!</div>';
+            if (!phone || phone.length < 10 || codeSent) {
                 return;
             }
             
@@ -1931,9 +1940,9 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    document.getElementById('login-step-1').style.display = 'none';
-                    document.getElementById('login-step-2').style.display = 'block';
-                    statusDiv.innerHTML = '<div class="alert alert-success">✅ Kod gönderildi! Telefon numaranıza gelen kodu girin.</div>';
+                    codeSent = true;
+                    document.getElementById('code-section').style.display = 'block';
+                    statusDiv.innerHTML = '<div class="alert alert-success">✅ Kod gönderildi! Kodu girin ve "Giriş Yap" butonuna tıklayın.</div>';
                 } else {
                     statusDiv.innerHTML = `<div class="alert alert-error">❌ ${data.message}</div>`;
                 }
@@ -1941,18 +1950,70 @@
                 statusDiv.innerHTML = `<div class="alert alert-error">❌ Hata: ${error.message}</div>`;
             }
         }
-
-        async function verifyLoginCode() {
-            const code = document.getElementById('login-code').value.trim();
+        
+        // Tek butonla giriş yap
+        async function simpleLogin() {
             const phone = document.getElementById('login-phone').value.trim();
+            const code = document.getElementById('login-code').value.trim();
+            const password = document.getElementById('login-password').value;
             const statusDiv = document.getElementById('login-status');
+            const loginBtn = document.getElementById('login-btn');
             
+            if (!phone) {
+                statusDiv.innerHTML = '<div class="alert alert-error">Lütfen telefon numarası girin!</div>';
+                return;
+            }
+            
+            // Eğer kod gönderilmemişse, önce kod gönder
+            if (!codeSent && !code) {
+                await autoSendCode();
+                return;
+            }
+            
+            // Eğer şifre gerekiyorsa
+            if (needsPassword) {
+                if (!password) {
+                    statusDiv.innerHTML = '<div class="alert alert-error">Lütfen şifreyi girin!</div>';
+                    return;
+                }
+                statusDiv.innerHTML = '<div class="loading">Şifre doğrulanıyor...</div>';
+                loginBtn.disabled = true;
+                
+                try {
+                    const response = await fetch('/api/telegram-login', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({action: 'verify_password', phone: phone, password: password})
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        statusDiv.innerHTML = '<div class="alert alert-success">✅ Giriş başarılı!</div>';
+                        showToast('✅ Telegram girişi başarılı!', 'success');
+                        setTimeout(() => {
+                            closeLoginModal();
+                            loadGroups();
+                        }, 2000);
+                    } else {
+                        statusDiv.innerHTML = `<div class="alert alert-error">❌ ${data.message}</div>`;
+                        loginBtn.disabled = false;
+                    }
+                } catch (error) {
+                    statusDiv.innerHTML = `<div class="alert alert-error">❌ Hata: ${error.message}</div>`;
+                    loginBtn.disabled = false;
+                }
+                return;
+            }
+            
+            // Kod doğrulama
             if (!code) {
                 statusDiv.innerHTML = '<div class="alert alert-error">Lütfen kodu girin!</div>';
                 return;
             }
             
-            statusDiv.innerHTML = '<div class="loading">Kod doğrulanıyor...</div>';
+            statusDiv.innerHTML = '<div class="loading">Giriş yapılıyor...</div>';
+            loginBtn.disabled = true;
             
             try {
                 const response = await fetch('/api/telegram-login', {
@@ -1965,63 +2026,26 @@
                 
                 if (data.success) {
                     if (data.requires_password) {
-                        document.getElementById('login-step-2').style.display = 'none';
-                        document.getElementById('login-step-password').style.display = 'block';
+                        needsPassword = true;
+                        document.getElementById('code-section').style.display = 'none';
+                        document.getElementById('password-section').style.display = 'block';
                         statusDiv.innerHTML = '<div class="alert alert-info">İki faktörlü doğrulama şifresi gerekiyor.</div>';
+                        loginBtn.disabled = false;
                     } else {
-                        statusDiv.innerHTML = '<div class="alert alert-success">✅ Giriş başarılı! Artık grupları yükleyebilirsiniz.</div>';
+                        statusDiv.innerHTML = '<div class="alert alert-success">✅ Giriş başarılı!</div>';
+                        showToast('✅ Telegram girişi başarılı!', 'success');
                         setTimeout(() => {
                             closeLoginModal();
-                            showToast('✅ Telegram girişi başarılı!', 'success');
                             loadGroups();
                         }, 2000);
                     }
                 } else {
                     statusDiv.innerHTML = `<div class="alert alert-error">❌ ${data.message}</div>`;
-                    console.error('Giriş hatası:', data);
-                    showToast(`❌ ${data.message}`, 'error');
-                }
-            } catch (error) {
-                console.error('Giriş exception hatası:', error);
-                statusDiv.innerHTML = `<div class="alert alert-error">❌ Hata: ${error.message}</div>`;
-                showToast(`❌ Hata: ${error.message}`, 'error');
-            }
-        }
-
-        async function verifyLoginPassword() {
-            const password = document.getElementById('login-password').value;
-            const phone = document.getElementById('login-phone').value.trim();
-            const statusDiv = document.getElementById('login-status');
-            
-            if (!password) {
-                statusDiv.innerHTML = '<div class="alert alert-error">Lütfen şifreyi girin!</div>';
-                return;
-            }
-            
-            statusDiv.innerHTML = '<div class="loading">Şifre doğrulanıyor...</div>';
-            
-            try {
-                const response = await fetch('/api/telegram-login', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({action: 'verify_password', phone: phone, password: password})
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    statusDiv.innerHTML = '<div class="alert alert-success">✅ Giriş başarılı! Artık grupları yükleyebilir ve botu başlatabilirsiniz.</div>';
-                    showToast('✅ Telegram girişi başarılı!', 'success');
-                    setTimeout(() => {
-                        closeLoginModal();
-                        loadGroups();
-                    }, 2000);
-                } else {
-                    statusDiv.innerHTML = `<div class="alert alert-error">❌ ${data.message}</div>`;
-                    showToast(`❌ ${data.message}`, 'error');
+                    loginBtn.disabled = false;
                 }
             } catch (error) {
                 statusDiv.innerHTML = `<div class="alert alert-error">❌ Hata: ${error.message}</div>`;
+                loginBtn.disabled = false;
             }
         }
 

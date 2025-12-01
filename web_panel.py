@@ -817,15 +817,10 @@ def test_telegram_api():
             return jsonify({'success': False, 'message': 'Session dosyası kullanımda! Lütfen birkaç saniye bekleyip tekrar deneyin.'})
         return jsonify({'success': False, 'message': f'Test hatası: {error_msg}'})
 
-# Geçici phone_code_hash saklama (memory'de)
-phone_code_hashes = {}
-
+# Basitleştirilmiş giriş - phone_code_hash session'da otomatik saklanır
 @app.route('/api/telegram-login', methods=['POST'])
 def telegram_login():
-    """Telegram'a giriş yap"""
-    import uuid
-    import time
-    
+    """Telegram'a giriş yap - Basitleştirilmiş versiyon"""
     try:
         data = request.json
         action = data.get('action')
@@ -835,37 +830,28 @@ def telegram_login():
         if not config['API_ID'] or not config['API_HASH']:
             return jsonify({'success': False, 'message': 'API bilgileri eksik! Lütfen önce API ID ve API Hash girin.'})
         
-        # Session dosyası adı (ana session dosyası)
         session_name = 'session'
         
-        # Async login fonksiyonu
         async def handle_login():
             client = TelegramClient(session_name, config['API_ID'], config['API_HASH'])
             
             try:
                 await client.connect()
                 
+                # Zaten giriş yapılmış mı kontrol et
+                if await client.is_user_authorized():
+                    await client.disconnect()
+                    return {'success': True, 'message': 'Zaten giriş yapılmış!', 'requires_password': False}
+                
                 if action == 'send_code':
-                    # Kod gönder
                     try:
-                        # send_code_request bir SentCode objesi döner, içinde phone_code_hash var
                         sent_code = await client.send_code_request(phone)
-                        phone_code_hash = sent_code.phone_code_hash
-                        
-                        # phone_code_hash'i geçici olarak sakla (memory'de)
-                        phone_code_hashes[phone] = phone_code_hash
-                        print(f"Kod gönderildi, phone_code_hash saklandı: {phone_code_hash[:10]}...")
-                        
-                        # Session'ı kaydet (phone_code_hash session'a kaydedilir)
+                        # Session otomatik olarak phone_code_hash'i kaydeder
                         client.session.save()
-                        # Bağlantıyı kapat ama session dosyası kalacak
                         await client.disconnect()
-                        return {'success': True, 'message': 'Kod gönderildi! Telefon numaranıza gelen kodu girin.'}
+                        return {'success': True, 'message': 'Kod gönderildi!'}
                     except Exception as e:
                         error_msg = str(e)
-                        print(f"Kod gönderme hatası: {error_msg}")
-                        import traceback
-                        traceback.print_exc()
                         try:
                             await client.disconnect()
                         except:
@@ -875,7 +861,7 @@ def telegram_login():
                         elif 'FLOOD_WAIT' in error_msg:
                             return {'success': False, 'message': 'Çok fazla deneme! Lütfen birkaç dakika bekleyin.'}
                         else:
-                            return {'success': False, 'message': f'Kod gönderme hatası: {error_msg}'}
+                            return {'success': False, 'message': f'Hata: {error_msg}'}
                 
                 elif action == 'verify_code':
                     code = data.get('code', '').strip()
@@ -883,62 +869,24 @@ def telegram_login():
                         return {'success': False, 'message': 'Kod gerekli!'}
                     
                     try:
-                        # Önce bağlan
-                        await client.connect()
-                        
-                        # Eğer client zaten yetkilendirilmişse, direkt başarılı dön
-                        if await client.is_user_authorized():
-                            print("Zaten giriş yapılmış")
-                            await client.disconnect()
-                            return {'success': True, 'message': 'Zaten giriş yapılmış!', 'requires_password': False}
-                        
-                        # phone_code_hash'i al (memory'den veya session'dan)
-                        phone_code_hash = phone_code_hashes.get(phone)
-                        if not phone_code_hash:
-                            # Session'dan yüklemeyi dene
-                            print(f"phone_code_hash memory'de bulunamadı, session'dan yükleniyor...")
-                            # Telethon otomatik olarak session'dan yükler, ama manuel de deneyebiliriz
-                            try:
-                                result = await client.sign_in(phone, code)
-                            except Exception as sign_in_error:
-                                error_msg = str(sign_in_error)
-                                if 'phone_code_hash' in error_msg.lower():
-                                    print(f"phone_code_hash bulunamadı: {error_msg}")
-                                    await client.disconnect()
-                                    # phone_code_hash'i temizle
-                                    phone_code_hashes.pop(phone, None)
-                                    return {'success': False, 'message': 'Kod süresi dolmuş veya geçersiz. Lütfen yeni kod isteyin.'}
-                                raise
-                        else:
-                            # phone_code_hash ile kod doğrula
-                            print(f"phone_code_hash kullanılıyor: {phone_code_hash[:10]}...")
-                            result = await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
-                            # Başarılı oldu, phone_code_hash'i temizle
-                            phone_code_hashes.pop(phone, None)
-                        
-                        # Session'ı kaydet
+                        # Telethon session'dan phone_code_hash'i otomatik alır
+                        result = await client.sign_in(phone, code)
                         client.session.save()
-                        # Bağlantıyı kapat (session dosyası kalacak)
                         await client.disconnect()
-                        # Session dosyasının varlığını kontrol et
+                        
                         session_file = f'{session_name}.session'
                         if os.path.exists(session_file):
-                            print(f"Session dosyası başarıyla kaydedildi: {session_file}")
-                            return {'success': True, 'message': 'Giriş başarılı! Session kaydedildi.', 'requires_password': False}
+                            return {'success': True, 'message': 'Giriş başarılı!', 'requires_password': False}
                         else:
-                            print(f"UYARI: Session dosyası bulunamadı: {session_file}")
-                            return {'success': False, 'message': 'Giriş başarılı ama session dosyası kaydedilemedi. Lütfen tekrar deneyin.'}
+                            return {'success': False, 'message': 'Session kaydedilemedi. Lütfen tekrar deneyin.'}
                     except Exception as e:
                         error_msg = str(e)
-                        print(f"Kod doğrulama hatası: {error_msg}")
-                        import traceback
-                        traceback.print_exc()
                         try:
                             await client.disconnect()
                         except:
                             pass
-                        if 'PASSWORD' in error_msg or 'password' in error_msg.lower() or '2FA' in error_msg or 'SESSION_PASSWORD_NEEDED' in error_msg:
-                            # Session'ı kaydet (2FA için)
+                        
+                        if 'PASSWORD' in error_msg or 'SESSION_PASSWORD_NEEDED' in error_msg:
                             try:
                                 client.session.save()
                             except:
@@ -946,10 +894,10 @@ def telegram_login():
                             return {'success': True, 'message': 'İki faktörlü doğrulama gerekiyor', 'requires_password': True}
                         elif 'PHONE_CODE_INVALID' in error_msg:
                             return {'success': False, 'message': 'Kod geçersiz! Lütfen doğru kodu girin.'}
-                        elif 'PHONE_CODE_EXPIRED' in error_msg:
+                        elif 'PHONE_CODE_EXPIRED' in error_msg or 'phone_code_hash' in error_msg.lower():
                             return {'success': False, 'message': 'Kod süresi dolmuş! Lütfen yeni kod isteyin.'}
                         else:
-                            return {'success': False, 'message': f'Kod hatası: {error_msg}'}
+                            return {'success': False, 'message': f'Hata: {error_msg}'}
                 
                 elif action == 'verify_password':
                     password = data.get('password', '')
@@ -958,48 +906,36 @@ def telegram_login():
                     
                     try:
                         await client.sign_in(password=password)
-                        # Session otomatik kaydedilir, ama manuel de kaydedebiliriz
                         client.session.save()
-                        # Bağlantıyı kapat (session dosyası kalacak)
                         await client.disconnect()
-                        # Session dosyasının varlığını kontrol et
+                        
                         session_file = f'{session_name}.session'
                         if os.path.exists(session_file):
-                            return {'success': True, 'message': 'Giriş başarılı! Session kaydedildi.'}
+                            return {'success': True, 'message': 'Giriş başarılı!'}
                         else:
-                            return {'success': False, 'message': 'Giriş başarılı ama session dosyası kaydedilemedi. Lütfen tekrar deneyin.'}
+                            return {'success': False, 'message': 'Session kaydedilemedi.'}
                     except Exception as e:
                         error_msg = str(e)
-                        if 'PASSWORD' in error_msg or 'password' in error_msg.lower():
-                            return {'success': False, 'message': 'Şifre yanlış! Lütfen tekrar deneyin.'}
+                        try:
+                            await client.disconnect()
+                        except:
+                            pass
+                        if 'PASSWORD' in error_msg:
+                            return {'success': False, 'message': 'Şifre yanlış!'}
                         else:
-                            return {'success': False, 'message': f'Şifre hatası: {error_msg}'}
+                            return {'success': False, 'message': f'Hata: {error_msg}'}
                 
                 else:
                     return {'success': False, 'message': 'Geçersiz işlem!'}
                     
             except Exception as e:
                 error_msg = str(e)
-                if 'PHONE_NUMBER_INVALID' in error_msg:
-                    return {'success': False, 'message': 'Telefon numarası geçersiz!'}
-                elif 'PHONE_CODE_INVALID' in error_msg:
-                    return {'success': False, 'message': 'Kod geçersiz!'}
-                elif 'FLOOD_WAIT' in error_msg:
-                    return {'success': False, 'message': 'Çok fazla deneme! Lütfen bekleyin.'}
-                else:
-                    return {'success': False, 'message': f'Hata: {error_msg}'}
-            finally:
-                # Session'ı kaydetmek için disconnect etme (session otomatik kaydedilir)
                 try:
-                    # Session'ı manuel olarak kaydet ve bağlantıyı kapat
-                    if client.is_connected():
-                        client.session.save()
-                        await client.disconnect()
-                except Exception as e:
-                    print(f"Session kaydetme/disconnect hatası: {e}")
+                    await client.disconnect()
+                except:
                     pass
+                return {'success': False, 'message': f'Hata: {error_msg}'}
         
-        # Async fonksiyonu çalıştır
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
