@@ -18,8 +18,8 @@ app.secret_key = os.environ.get('SECRET_KEY', 'padisah-telegram-monitoring-secre
 CORS(app)
 
 # Admin bilgileri
-ADMIN_USERNAME = 'oyku_admin'
-ADMIN_PASSWORD_HASH = sha256('Havuclukek'.encode()).hexdigest()
+ADMIN_USERNAME = 'isgAdmin'
+ADMIN_PASSWORD_HASH = sha256('KDB3C0Y@5jBO4V*0'.encode()).hexdigest()
 
 # Global Telegram client (lazy loading)
 telegram_client = None
