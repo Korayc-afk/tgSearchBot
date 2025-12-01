@@ -3,16 +3,23 @@ Telegram Monitoring Bot - Web Panel
 Flask tabanlı web arayüzü
 """
 
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_from_directory, session, redirect, url_for
 from flask_cors import CORS
 import asyncio
 import json
 from config_manager import load_config, save_config, get_config
 from telethon import TelegramClient
 import os
+from functools import wraps
+from hashlib import sha256
 
 app = Flask(__name__, static_folder='.')
+app.secret_key = os.environ.get('SECRET_KEY', 'padisah-telegram-monitoring-secret-key-change-in-production')
 CORS(app)
+
+# Admin bilgileri
+ADMIN_USERNAME = 'oyku_admin'
+ADMIN_PASSWORD_HASH = sha256('Havuclukek'.encode()).hexdigest()
 
 # Global Telegram client (lazy loading)
 telegram_client = None
@@ -26,7 +33,44 @@ def get_telegram_client():
             telegram_client = TelegramClient('session', config['API_ID'], config['API_HASH'])
     return telegram_client
 
+def login_required(f):
+    """Login kontrolü decorator"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('logged_in'):
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Login sayfası"""
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        
+        password_hash = sha256(password.encode()).hexdigest()
+        
+        if username == ADMIN_USERNAME and password_hash == ADMIN_PASSWORD_HASH:
+            session['logged_in'] = True
+            session['username'] = username
+            return redirect(url_for('index'))
+        else:
+            return render_template('login.html', error='Kullanıcı adı veya şifre hatalı!')
+    
+    # GET isteği - login sayfasını göster
+    if session.get('logged_in'):
+        return redirect(url_for('index'))
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    """Çıkış yap"""
+    session.clear()
+    return redirect(url_for('login'))
+
 @app.route('/')
+@login_required
 def index():
     """Ana sayfa"""
     return render_template('index.html')
@@ -42,6 +86,7 @@ def serve_logo_seffaf():
     return send_from_directory('.', 'logoSeffaf.png')
 
 @app.route('/api/config', methods=['GET'])
+@login_required
 def get_config_api():
     """Config'i getir"""
     config = load_config()
@@ -52,6 +97,7 @@ def get_config_api():
     return jsonify(safe_config)
 
 @app.route('/api/config', methods=['POST'])
+@login_required
 def save_config_api():
     """Config'i kaydet"""
     try:
@@ -110,6 +156,7 @@ def save_config_api():
         return jsonify({'success': False, 'message': f'Hata: {str(e)}'}), 500
 
 @app.route('/api/groups', methods=['GET'])
+@login_required
 def get_groups():
     """Telegram gruplarını listele"""
     try:
@@ -134,6 +181,7 @@ def get_groups():
         return jsonify({'success': False, 'message': error_msg, 'groups': []})
 
 @app.route('/api/groups/search', methods=['POST'])
+@login_required
 def search_groups():
     """Telegram'da grup ara (kullanıcının üye olduğu gruplar içinde)"""
     try:
@@ -164,6 +212,7 @@ def search_groups():
         return jsonify({'success': False, 'message': f'Arama hatası: {error_msg}', 'groups': []})
 
 @app.route('/api/groups/add-by-username', methods=['POST'])
+@login_required
 def add_group_by_username():
     """Username'den grup ekle"""
     try:
@@ -353,6 +402,7 @@ async def fetch_groups():
             raise Exception(f'Grup yükleme hatası: {error_msg}')
 
 @app.route('/api/results', methods=['GET'])
+@login_required
 def get_results():
     """Sonuçları getir (tarih filtresi ile)"""
     try:
@@ -452,6 +502,7 @@ def get_results():
         return jsonify({'success': False, 'message': f'Hata: {str(e)}', 'results': []})
 
 @app.route('/api/results/clear', methods=['POST'])
+@login_required
 def clear_results():
     """Eski sonuçları temizle"""
     try:
@@ -487,6 +538,7 @@ def clear_results():
         return jsonify({'success': False, 'message': f'Hata: {str(e)}', 'details': error_details})
 
 @app.route('/api/results/export', methods=['GET'])
+@login_required
 def export_results():
     """Sonuçları Excel formatında indir"""
     try:
@@ -643,6 +695,7 @@ def export_results():
         return jsonify({'success': False, 'message': f'Hata: {str(e)}'}), 500
 
 @app.route('/api/archive', methods=['GET'])
+@login_required
 def get_archive():
     """Arşiv sonuçlarını getir (tüm sonuçlar)"""
     try:
@@ -723,6 +776,7 @@ def get_archive():
         return jsonify({'success': False, 'message': f'Hata: {str(e)}', 'results': []})
 
 @app.route('/api/test-telegram', methods=['POST'])
+@login_required
 def test_telegram_api():
     """Telegram API bilgilerini test et"""
     import time
@@ -819,6 +873,7 @@ def test_telegram_api():
 
 # Basitleştirilmiş giriş - phone_code_hash session'da otomatik saklanır
 @app.route('/api/telegram-login', methods=['POST'])
+@login_required
 def telegram_login():
     """Telegram'a giriş yap - Basitleştirilmiş versiyon"""
     try:
@@ -954,6 +1009,7 @@ bot_status = {'running': False, 'start_time': None, 'monitored_groups': 0, 'tota
 bot_logs = []
 
 @app.route('/api/bot-status', methods=['GET'])
+@login_required
 def get_bot_status():
     """Bot durumunu getir"""
     try:
@@ -989,6 +1045,7 @@ def get_bot_status():
         return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/api/bot-start', methods=['POST'])
+@login_required
 def start_bot():
     """Botu başlat"""
     import subprocess
@@ -1055,6 +1112,7 @@ def start_bot():
         return jsonify({'success': False, 'message': f'Bot başlatma hatası: {str(e)}'})
 
 @app.route('/api/bot-stop', methods=['POST'])
+@login_required
 def stop_bot():
     """Botu durdur"""
     global bot_process, bot_status
@@ -1080,6 +1138,7 @@ def stop_bot():
         return jsonify({'success': False, 'message': f'Bot durdurma hatası: {str(e)}'})
 
 @app.route('/api/bot-logs', methods=['GET'])
+@login_required
 def get_bot_logs():
     """Bot loglarını getir"""
     try:
@@ -1091,6 +1150,7 @@ def get_bot_logs():
         return jsonify({'success': False, 'message': str(e), 'logs': []})
 
 @app.route('/api/scan', methods=['POST'])
+@login_required
 def start_scan():
     """Belirli tarih aralığı için tarama başlat"""
     import subprocess
@@ -1185,6 +1245,7 @@ def start_scan():
         return jsonify({'success': False, 'message': f'Tarama başlatma hatası: {str(e)}'})
 
 @app.route('/api/scan-status', methods=['GET'])
+@login_required
 def get_scan_status():
     """Tarama durumunu getir"""
     try:
