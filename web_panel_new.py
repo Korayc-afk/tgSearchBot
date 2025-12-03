@@ -1937,6 +1937,9 @@ def telegram_login_legacy():
                             return {'success': True, 'message': 'Giriş başarılı!', 'requires_password': False}
                     except Exception as e:
                         error_msg = str(e)
+                        logger.error(f"   ❌ sign_in hatası: {error_msg}")
+                        import traceback
+                        logger.error(f"   Traceback: {traceback.format_exc()}")
                         try:
                             await client.disconnect()
                         except:
@@ -1950,10 +1953,13 @@ def telegram_login_legacy():
                                 logger.warning(f"   ⚠️  Session kaydetme hatası: {save_error}")
                             return {'success': True, 'message': 'İki faktörlü doğrulama gerekiyor', 'requires_password': True}
                         elif 'PHONE_CODE_INVALID' in error_msg:
+                            logger.warning(f"   ⚠️  Kod geçersiz!")
                             return {'success': False, 'message': 'Kod geçersiz!'}
                         elif 'PHONE_CODE_EXPIRED' in error_msg:
+                            logger.warning(f"   ⚠️  Kod süresi dolmuş!")
                             return {'success': False, 'message': 'Kod süresi dolmuş!'}
                         else:
+                            logger.error(f"   ❌ Bilinmeyen hata: {error_msg}")
                             return {'success': False, 'message': f'Hata: {error_msg}'}
                 
                 elif action == 'verify_password':
