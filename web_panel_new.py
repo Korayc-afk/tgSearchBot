@@ -1242,7 +1242,7 @@ def telegram_login(tenant_id):
                             return {'success': False, 'message': 'phone_code_hash boş!'}
                         
                         # Session'ı async olarak kaydet (phone_code_hash otomatik kaydedilir)
-                        await client.session.save()
+                        client.session.save()
                         logger.info(f"   ✅ Kod gönderildi, phone_code_hash: {phone_code_hash[:10]}...")
                         await client.disconnect()
                         return {'success': True, 'message': 'Kod gönderildi!', 'phone_code_hash': phone_code_hash}
@@ -1278,7 +1278,7 @@ def telegram_login(tenant_id):
                         # Session'ı kaydet (async olarak)
                         try:
                             logger.info(f"   💾 Session kaydediliyor...")
-                            await client.session.save()
+                            client.session.save()
                             logger.info(f"   ✅ Session kaydedildi")
                         except Exception as save_error:
                             logger.warning(f"   ⚠️  Session kaydetme hatası (devam ediliyor): {save_error}")
@@ -1310,7 +1310,7 @@ def telegram_login(tenant_id):
                         
                         if 'PASSWORD' in error_msg or 'SESSION_PASSWORD_NEEDED' in error_msg:
                             try:
-                                await client.session.save()
+                                client.session.save()
                                 logger.info(f"   ✅ Session kaydedildi (password required)")
                             except Exception as save_error:
                                 logger.warning(f"   ⚠️  Session kaydetme hatası: {save_error}")
@@ -1331,7 +1331,7 @@ def telegram_login(tenant_id):
                         await client.sign_in(password=password)
                         # Session'ı kaydet (async olarak)
                         try:
-                            await client.session.save()
+                            client.session.save()
                             logger.info(f"   ✅ Session kaydedildi (password)")
                         except Exception as save_error:
                             logger.warning(f"   ⚠️  Session kaydetme hatası (devam ediliyor): {save_error}")
@@ -1956,7 +1956,7 @@ def telegram_login_legacy():
                             return {'success': False, 'message': 'phone_code_hash boş!'}
                         
                         # Session'ı async olarak kaydet (phone_code_hash otomatik kaydedilir)
-                        await client.session.save()
+                        client.session.save()
                         logger.info(f"   ✅ Kod gönderildi, phone_code_hash: {phone_code_hash[:10]}...")
                         await client.disconnect()
                         return {'success': True, 'message': 'Kod gönderildi!', 'phone_code_hash': phone_code_hash}
@@ -1992,7 +1992,7 @@ def telegram_login_legacy():
                         # Session'ı kaydet (async olarak)
                         try:
                             logger.info(f"   💾 Session kaydediliyor...")
-                            await client.session.save()
+                            client.session.save()
                             logger.info(f"   ✅ Session kaydedildi")
                         except Exception as save_error:
                             logger.warning(f"   ⚠️  Session kaydetme hatası (devam ediliyor): {save_error}")
@@ -2027,7 +2027,7 @@ def telegram_login_legacy():
                         
                         if 'PASSWORD' in error_msg or 'SESSION_PASSWORD_NEEDED' in error_msg:
                             try:
-                                await client.session.save()
+                                client.session.save()
                                 logger.info(f"   ✅ Session kaydedildi (password required)")
                             except Exception as save_error:
                                 logger.warning(f"   ⚠️  Session kaydetme hatası: {save_error}")
@@ -2051,7 +2051,7 @@ def telegram_login_legacy():
                         await client.sign_in(password=password)
                         # Session'ı kaydet (async olarak)
                         try:
-                            await client.session.save()
+                            client.session.save()
                             logger.info(f"   ✅ Session kaydedildi (password)")
                         except Exception as save_error:
                             logger.warning(f"   ⚠️  Session kaydetme hatası (devam ediliyor): {save_error}")
