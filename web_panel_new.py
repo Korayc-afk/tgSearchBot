@@ -1218,7 +1218,9 @@ def telegram_login(tenant_id):
                 if action == 'send_code':
                     try:
                         sent_code = await client.send_code_request(phone)
-                        client.session.save()
+                        # Session'ı async olarak kaydet (phone_code_hash otomatik kaydedilir)
+                        await client.session.save()
+                        logger.info(f"   ✅ Kod gönderildi, phone_code_hash session'a kaydedildi")
                         await client.disconnect()
                         return {'success': True, 'message': 'Kod gönderildi!'}
                     except Exception as e:
@@ -1883,7 +1885,9 @@ def telegram_login_legacy():
                 if action == 'send_code':
                     try:
                         sent_code = await client.send_code_request(phone)
-                        client.session.save()
+                        # Session'ı async olarak kaydet (phone_code_hash otomatik kaydedilir)
+                        await client.session.save()
+                        logger.info(f"   ✅ Kod gönderildi, phone_code_hash session'a kaydedildi")
                         await client.disconnect()
                         return {'success': True, 'message': 'Kod gönderildi!'}
                     except Exception as e:
