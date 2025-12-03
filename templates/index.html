@@ -1391,57 +1391,82 @@
                     
                     if (username) {
                         // Link'ten grup bilgilerini çek
-                        const response = await fetch('/api/groups/add-by-username', {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({username: username})
-                        });
-                        
-                        const data = await response.json();
-                        if (data.success && data.group) {
-                            const group = data.group;
-                            // Grup zaten ekli mi kontrol et
-                            if (!selectedGroups.some(g => (typeof g === 'object' ? g.id : g) === group.id)) {
-                                allGroupsCache[group.id] = group;
-                                selectedGroups.push({
-                                    id: group.id,
-                                    name: group.name || username,
-                                    startDate: '',
-                                    endDate: ''
-                                });
-                                addedCount++;
+                        try {
+                            const response = await fetch('/api/groups/add-by-username', {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({username: username})
+                            });
+                            
+                            if (!response.ok) {
+                                const errorText = await response.text();
+                                throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
                             }
-                        } else {
-                            const errorMsg = data.message || 'Bilinmeyen hata';
-                            console.error(`Grup ekleme hatası (${username}):`, errorMsg);
-                            console.error('Backend response:', data);
+                            
+                            const data = await response.json();
+                            if (data.success && data.group) {
+                                const group = data.group;
+                                // Grup zaten ekli mi kontrol et
+                                if (!selectedGroups.some(g => (typeof g === 'object' ? g.id : g) === group.id)) {
+                                    allGroupsCache[group.id] = group;
+                                    selectedGroups.push({
+                                        id: group.id,
+                                        name: group.name || username,
+                                        startDate: '',
+                                        endDate: ''
+                                    });
+                                    addedCount++;
+                                }
+                            } else {
+                                const errorMsg = data.message || 'Bilinmeyen hata';
+                                console.error(`Grup ekleme hatası (${username}):`, errorMsg);
+                                console.error('Backend response:', data);
+                                
+                                // Eğer giriş yapılmamışsa özel mesaj göster
+                                if (errorMsg.includes('giriş yapılmamış') || errorMsg.includes('not authorized') || errorMsg.includes('unauthorized')) {
+                                    // Bu hata özel olarak işlenecek
+                                }
+                                errorCount++;
+                            }
+                        } catch (fetchError) {
+                            console.error(`Grup ekleme network hatası (${username}):`, fetchError);
                             errorCount++;
                         }
                     } else {
                         // İsim ile arama yap
-                        const response = await fetch('/api/groups/search', {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({search_term: item})
-                        });
-                        
-                        const data = await response.json();
-                        if (data.success && data.groups && data.groups.length > 0) {
-                            const group = data.groups[0]; // İlk sonucu al
-                            if (!selectedGroups.some(g => (typeof g === 'object' ? g.id : g) === group.id)) {
-                                allGroupsCache[group.id] = group;
-                                selectedGroups.push({
-                                    id: group.id,
-                                    name: group.name || item,
-                                    startDate: '',
-                                    endDate: ''
-                                });
-                                addedCount++;
+                        try {
+                            const response = await fetch('/api/groups/search', {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({search_term: item})
+                            });
+                            
+                            if (!response.ok) {
+                                const errorText = await response.text();
+                                throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
                             }
-                        } else {
-                            const errorMsg = data.message || 'Grup bulunamadı';
-                            console.error(`Grup arama hatası (${item}):`, errorMsg);
-                            console.error('Backend response:', data);
+                            
+                            const data = await response.json();
+                            if (data.success && data.groups && data.groups.length > 0) {
+                                const group = data.groups[0]; // İlk sonucu al
+                                if (!selectedGroups.some(g => (typeof g === 'object' ? g.id : g) === group.id)) {
+                                    allGroupsCache[group.id] = group;
+                                    selectedGroups.push({
+                                        id: group.id,
+                                        name: group.name || item,
+                                        startDate: '',
+                                        endDate: ''
+                                    });
+                                    addedCount++;
+                                }
+                            } else {
+                                const errorMsg = data.message || 'Grup bulunamadı';
+                                console.error(`Grup arama hatası (${item}):`, errorMsg);
+                                console.error('Backend response:', data);
+                                errorCount++;
+                            }
+                        } catch (fetchError) {
+                            console.error(`Grup arama network hatası (${item}):`, fetchError);
                             errorCount++;
                         }
                     }
@@ -1465,21 +1490,25 @@
                 renderSelectedGroups();
             } else {
                 // Hata mesajlarını kontrol et - eğer giriş yapılmamışsa özel mesaj göster
-                const hasLoginError = errorCount > 0;
-                let errorMsg = '';
-                if (hasLoginError) {
-                    errorMsg = `❌ Hiçbir grup eklenemedi. (${errorCount} hata)\n\n`;
-                    errorMsg += '🔐 Telegram\'a giriş yapmanız gerekiyor!\n';
-                    errorMsg += 'Lütfen "Gruplar" sekmesinden "Telegram\'a Giriş Yap" butonuna tıklayın.';
-                    // Giriş modalını otomatik aç
-                    setTimeout(() => {
-                        if (typeof showLoginModal === 'function') {
-                            showLoginModal();
+                let errorMsg = `❌ Hiçbir grup eklenemedi. (${errorCount} hata)\n\n`;
+                errorMsg += '🔐 Telegram\'a giriş yapmanız gerekiyor!\n';
+                errorMsg += 'Lütfen telefon numarası alanındaki "🧪 Test Et" butonuna tıklayarak Telegram girişini yapın.';
+                // Giriş modalını otomatik aç
+                setTimeout(() => {
+                    if (typeof testPhoneNumber === 'function') {
+                        // Telefon numarası varsa test et, yoksa modal aç
+                        const phoneNumber = document.getElementById('phone_number').value.trim();
+                        if (phoneNumber) {
+                            testPhoneNumber();
+                        } else {
+                            if (typeof showLoginModal === 'function') {
+                                showLoginModal();
+                            }
                         }
-                    }, 1000);
-                } else {
-                    errorMsg = '❌ Hiçbir grup eklenemedi. Lütfen konsolu (F12) kontrol edin.';
-                }
+                    } else if (typeof showLoginModal === 'function') {
+                        showLoginModal();
+                    }
+                }, 1000);
                 showToast(errorMsg, 'error', 15000);
                 console.error('Grup ekleme başarısız. Tüm hatalar yukarıda listelenmiştir.');
             }
