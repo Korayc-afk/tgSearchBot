@@ -39,6 +39,7 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String(100), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
+    password_plain = Column(String(255), nullable=True)  # Şifreleri görüntülemek için (sadece super admin)
     role = Column(String(20), nullable=False, default='admin')  # 'admin' veya 'super_admin'
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login = Column(DateTime, nullable=True)
@@ -295,6 +296,7 @@ def create_super_admin(username='padisah_admin', password='P@d1$@h2024!Secure#Ad
         super_admin = User(
             username=username,
             password_hash=password_hash,
+            password_plain=password,  # Plain text olarak da sakla (sadece super admin görebilir)
             role='super_admin'
         )
         db.add(super_admin)

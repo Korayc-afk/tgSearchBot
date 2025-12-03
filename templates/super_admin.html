@@ -367,6 +367,7 @@
                         <tr>
                             <th>ID</th>
                             <th>Kullanıcı Adı</th>
+                            <th>Şifre</th>
                             <th>Rol</th>
                             <th>Son Giriş</th>
                             <th>İşlemler</th>
@@ -576,6 +577,7 @@
                         tr.innerHTML = `
                             <td>${user.id}</td>
                             <td>${user.username}</td>
+                            <td>${user.password || '***'}</td>
                             <td><span class="badge ${user.role === 'super_admin' ? 'badge-danger' : 'badge-success'}">${user.role === 'super_admin' ? 'Süper Admin' : 'Admin'}</span></td>
                             <td>${user.last_login ? new Date(user.last_login).toLocaleString('tr-TR') : 'Hiç giriş yapmamış'}</td>
                             <td>
