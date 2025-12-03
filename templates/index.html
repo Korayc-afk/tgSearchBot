@@ -2052,6 +2052,7 @@
         // Basitleştirilmiş giriş fonksiyonları
         let codeSent = false;
         let needsPassword = false;
+        let phoneCodeHash = null; // phone_code_hash'i sakla
         
         function showLoginModal(phoneNumber = null) {
             document.getElementById('login-modal').style.display = 'flex';
@@ -2104,12 +2105,14 @@
             document.getElementById('login-btn').innerHTML = 'Giriş Yap';
             codeSent = false;
             needsPassword = false;
+            phoneCodeHash = null; // phone_code_hash'i sıfırla
         }
 
         function closeLoginModal() {
             document.getElementById('login-modal').style.display = 'none';
             codeSent = false;
             needsPassword = false;
+            phoneCodeHash = null; // phone_code_hash'i sıfırla
         }
         
         // Telefon numarası girildiğinde otomatik kod gönder (duplicate önleme ile)
@@ -2137,6 +2140,13 @@
                 
                 if (data.success) {
                     codeSent = true;
+                    // phone_code_hash'i sakla
+                    if (data.phone_code_hash) {
+                        phoneCodeHash = data.phone_code_hash;
+                        console.log('✅ phone_code_hash saklandı:', phoneCodeHash.substring(0, 10) + '...');
+                    } else {
+                        console.warn('⚠️ phone_code_hash response\'da yok!');
+                    }
                     // Kod giriş alanını KESINLIKLE göster - birden fazla kez kontrol et
                     const showCodeSection = () => {
                         const codeSection = document.getElementById('code-section');
@@ -2267,6 +2277,14 @@
                 return;
             }
             
+            // phone_code_hash kontrolü
+            if (!phoneCodeHash) {
+                statusDiv.innerHTML = '<div class="alert alert-error">❌ phone_code_hash eksik! Lütfen tekrar kod isteyin.</div>';
+                codeSent = false;
+                phoneCodeHash = null;
+                return;
+            }
+            
             statusDiv.innerHTML = '<div class="loading">Giriş yapılıyor...</div>';
             loginBtn.disabled = true;
             
@@ -2274,7 +2292,12 @@
                 const response = await fetch('/api/telegram-login', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({action: 'verify_code', phone: phone, code: code})
+                    body: JSON.stringify({
+                        action: 'verify_code', 
+                        phone: phone, 
+                        code: code,
+                        phone_code_hash: phoneCodeHash
+                    })
                 });
                 
                 const data = await response.json();

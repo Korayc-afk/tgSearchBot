@@ -1218,11 +1218,12 @@ def telegram_login(tenant_id):
                 if action == 'send_code':
                     try:
                         sent_code = await client.send_code_request(phone)
+                        phone_code_hash = sent_code.phone_code_hash
                         # Session'ı async olarak kaydet (phone_code_hash otomatik kaydedilir)
                         await client.session.save()
-                        logger.info(f"   ✅ Kod gönderildi, phone_code_hash session'a kaydedildi")
+                        logger.info(f"   ✅ Kod gönderildi, phone_code_hash: {phone_code_hash[:10]}...")
                         await client.disconnect()
-                        return {'success': True, 'message': 'Kod gönderildi!'}
+                        return {'success': True, 'message': 'Kod gönderildi!', 'phone_code_hash': phone_code_hash}
                     except Exception as e:
                         error_msg = str(e)
                         try:
@@ -1238,12 +1239,15 @@ def telegram_login(tenant_id):
                 
                 elif action == 'verify_code':
                     code = data.get('code', '').strip()
+                    phone_code_hash = data.get('phone_code_hash')
                     if not code:
                         return {'success': False, 'message': 'Kod gerekli!'}
+                    if not phone_code_hash:
+                        return {'success': False, 'message': 'phone_code_hash eksik, lütfen tekrar kod isteyin.'}
                     
                     try:
-                        logger.info(f"   🔐 Kod doğrulanıyor: {code[:2]}**")
-                        result = await client.sign_in(phone, code)
+                        logger.info(f"   🔐 Kod doğrulanıyor: {code[:2]}** (hash: {phone_code_hash[:10]}...)")
+                        result = await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
                         logger.info(f"   ✅ sign_in başarılı!")
                         
                         # Session'ı kaydet (async olarak)
@@ -1885,11 +1889,12 @@ def telegram_login_legacy():
                 if action == 'send_code':
                     try:
                         sent_code = await client.send_code_request(phone)
+                        phone_code_hash = sent_code.phone_code_hash
                         # Session'ı async olarak kaydet (phone_code_hash otomatik kaydedilir)
                         await client.session.save()
-                        logger.info(f"   ✅ Kod gönderildi, phone_code_hash session'a kaydedildi")
+                        logger.info(f"   ✅ Kod gönderildi, phone_code_hash: {phone_code_hash[:10]}...")
                         await client.disconnect()
-                        return {'success': True, 'message': 'Kod gönderildi!'}
+                        return {'success': True, 'message': 'Kod gönderildi!', 'phone_code_hash': phone_code_hash}
                     except Exception as e:
                         error_msg = str(e)
                         try:
@@ -1905,12 +1910,15 @@ def telegram_login_legacy():
                 
                 elif action == 'verify_code':
                     code = data.get('code', '').strip()
+                    phone_code_hash = data.get('phone_code_hash')
                     if not code:
                         return {'success': False, 'message': 'Kod gerekli!'}
+                    if not phone_code_hash:
+                        return {'success': False, 'message': 'phone_code_hash eksik, lütfen tekrar kod isteyin.'}
                     
                     try:
-                        logger.info(f"   🔐 Kod doğrulanıyor: {code[:2]}**")
-                        result = await client.sign_in(phone, code)
+                        logger.info(f"   🔐 Kod doğrulanıyor: {code[:2]}** (hash: {phone_code_hash[:10]}...)")
+                        result = await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
                         logger.info(f"   ✅ sign_in başarılı!")
                         
                         # Session'ı kaydet (async olarak)
