@@ -1044,7 +1044,15 @@ def telegram_login(tenant_id):
             return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
         tenant_slug = tenant.slug
         session_path = config.session_file_path or f'tenants/{tenant_slug}/session.session'
-        client = TelegramClient(session_path.replace('.session', ''), config.api_id, config.get_api_hash())
+        
+        # Session dizinini oluştur
+        session_dir = os.path.dirname(session_path)
+        if session_dir and not os.path.exists(session_dir):
+            os.makedirs(session_dir, exist_ok=True)
+        
+        # Session dosya adını düzelt (TelegramClient .session uzantısını ekler)
+        session_name = session_path.replace('.session', '')
+        client = TelegramClient(session_name, config.api_id, config.get_api_hash())
         
         async def handle_login():
             try:
@@ -1150,6 +1158,8 @@ def telegram_login(tenant_id):
         
         return jsonify(result)
     except Exception as e:
+        logger.error(f"   ❌ Telegram login hatası: {str(e)}")
+        logger.error(f"   Traceback: {traceback.format_exc()}")
         return jsonify({'success': False, 'message': f'Giriş hatası: {str(e)}'})
 
 @app.route('/api/admin/<int:tenant_id>/telegram/groups/search', methods=['POST'])
