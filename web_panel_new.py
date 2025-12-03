@@ -81,6 +81,16 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
+@app.route('/logoSeffaf.png')
+def serve_logo_seffaf():
+    """Şeffaf logo dosyasını serve et"""
+    return send_from_directory('.', 'logoSeffaf.png')
+
+@app.route('/s-l400.jpg')
+def serve_logo():
+    """Logo dosyasını serve et"""
+    return send_from_directory('.', 's-l400.jpg')
+
 # ==================== MAIN ROUTES ====================
 
 @app.route('/')
