@@ -2060,13 +2060,41 @@
             document.getElementById('password-section').style.display = 'none';
             document.getElementById('login-status').innerHTML = '';
             
-            // Telefon numarası varsa otomatik doldur
+            // Telefon numarası varsa otomatik doldur ve kod gönder
             if (phoneNumber) {
                 document.getElementById('login-phone').value = phoneNumber;
-                // Otomatik kod gönder
+                // Kod giriş alanını hazır hale getir (henüz görünür değil)
+                const codeSection = document.getElementById('code-section');
+                if (codeSection) {
+                    codeSection.style.display = 'none'; // Başlangıçta gizli
+                    codeSection.style.visibility = 'visible';
+                    codeSection.style.opacity = '1';
+                }
+                // Otomatik kod gönder - daha uzun timeout ile modal'ın tam render olmasını bekle
                 setTimeout(() => {
-                    autoSendCode();
-                }, 300);
+                    autoSendCode().then(() => {
+                        // Kod gönderildikten sonra kod giriş alanını kesinlikle göster
+                        setTimeout(() => {
+                            const codeSection = document.getElementById('code-section');
+                            if (codeSection) {
+                                codeSection.style.display = 'block';
+                                codeSection.style.visibility = 'visible';
+                                codeSection.style.opacity = '1';
+                                codeSection.style.border = '2px solid #28a745';
+                                codeSection.style.borderRadius = '8px';
+                                codeSection.style.padding = '15px';
+                                codeSection.style.backgroundColor = '#f0f9ff';
+                                codeSection.style.animation = 'pulse 0.5s ease-in-out';
+                                
+                                const codeInput = document.getElementById('login-code');
+                                if (codeInput) {
+                                    codeInput.style.border = '2px solid #28a745';
+                                    codeInput.focus();
+                                }
+                            }
+                        }, 200);
+                    });
+                }, 500);
             } else {
                 document.getElementById('login-phone').value = '';
             }
@@ -2109,35 +2137,50 @@
                 
                 if (data.success) {
                     codeSent = true;
-                    // Kod giriş alanını kesinlikle göster
-                    const codeSection = document.getElementById('code-section');
-                    if (codeSection) {
-                        codeSection.style.display = 'block';
-                        codeSection.style.visibility = 'visible';
-                        codeSection.style.opacity = '1';
-                        // Highlight efekti ekle
-                        codeSection.style.animation = 'pulse 0.5s ease-in-out';
-                        codeSection.style.border = '2px solid #28a745';
-                        codeSection.style.borderRadius = '8px';
-                        codeSection.style.padding = '15px';
-                        codeSection.style.backgroundColor = '#f0f9ff';
-                        console.log('✅ Kod giriş alanı gösterildi');
-                        
-                        // Kod input'una focus ver
-                        const codeInput = document.getElementById('login-code');
-                        if (codeInput) {
-                            codeInput.style.display = 'block';
-                            codeInput.style.visibility = 'visible';
-                            codeInput.style.border = '2px solid #28a745';
-                            setTimeout(() => {
-                                codeInput.focus();
-                                console.log('✅ Kod input focus edildi');
-                            }, 100);
+                    // Kod giriş alanını KESINLIKLE göster - birden fazla kez kontrol et
+                    const showCodeSection = () => {
+                        const codeSection = document.getElementById('code-section');
+                        if (codeSection) {
+                            codeSection.style.display = 'block';
+                            codeSection.style.visibility = 'visible';
+                            codeSection.style.opacity = '1';
+                            codeSection.style.border = '2px solid #28a745';
+                            codeSection.style.borderRadius = '8px';
+                            codeSection.style.padding = '15px';
+                            codeSection.style.backgroundColor = '#f0f9ff';
+                            codeSection.style.animation = 'pulse 0.5s ease-in-out';
+                            codeSection.style.marginTop = '15px';
+                            codeSection.style.marginBottom = '15px';
+                            console.log('✅ Kod giriş alanı gösterildi');
+                            
+                            // Kod input'una focus ver
+                            const codeInput = document.getElementById('login-code');
+                            if (codeInput) {
+                                codeInput.style.display = 'block';
+                                codeInput.style.visibility = 'visible';
+                                codeInput.style.border = '2px solid #28a745';
+                                codeInput.style.width = '100%';
+                                codeInput.style.padding = '12px';
+                                setTimeout(() => {
+                                    codeInput.focus();
+                                    console.log('✅ Kod input focus edildi');
+                                }, 100);
+                            }
+                            return true;
+                        } else {
+                            console.error('❌ code-section elementi bulunamadı!');
+                            return false;
                         }
-                    } else {
-                        console.error('❌ code-section elementi bulunamadı!');
-                    }
-                    statusDiv.innerHTML = '<div class="alert alert-success" style="font-size: 16px; font-weight: bold;">✅ Kod gönderildi! <br><strong style="color: #28a745;">Aşağıdaki yeşil çerçeveli alana kodu girin</strong> ve "Giriş Yap" butonuna tıklayın.</div>';
+                    };
+                    
+                    // Hemen göster
+                    showCodeSection();
+                    // Bir daha kontrol et (DOM gecikmesi için)
+                    setTimeout(() => showCodeSection(), 100);
+                    setTimeout(() => showCodeSection(), 300);
+                    setTimeout(() => showCodeSection(), 500);
+                    
+                    statusDiv.innerHTML = '<div class="alert alert-success" style="font-size: 16px; font-weight: bold; padding: 15px; border: 2px solid #28a745; border-radius: 8px; background: #d4edda;">✅ <strong style="color: #28a745; font-size: 18px;">SMS KODU GÖNDERİLDİ!</strong><br><br>📱 <strong style="color: #155724;">Aşağıdaki yeşil çerçeveli alana kodu girin</strong> ve "Giriş Yap" butonuna tıklayın.</div>';
                 } else {
                     statusDiv.innerHTML = `<div class="alert alert-error">❌ ${data.message}</div>`;
                     codeSent = false; // Hata durumunda tekrar denemeye izin ver
