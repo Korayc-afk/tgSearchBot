@@ -2137,6 +2137,7 @@
                 });
                 
                 const data = await response.json();
+                console.log('📥 Send Code Response:', data);
                 
                 if (data.success) {
                     codeSent = true;
@@ -2144,8 +2145,12 @@
                     if (data.phone_code_hash) {
                         phoneCodeHash = data.phone_code_hash;
                         console.log('✅ phone_code_hash saklandı:', phoneCodeHash.substring(0, 10) + '...');
+                        console.log('✅ phoneCodeHash değişkeni:', phoneCodeHash ? 'DOLU' : 'BOŞ');
                     } else {
-                        console.warn('⚠️ phone_code_hash response\'da yok!');
+                        console.error('❌ phone_code_hash response\'da yok! Response:', JSON.stringify(data));
+                        statusDiv.innerHTML = '<div class="alert alert-error">❌ phone_code_hash alınamadı! Lütfen tekrar deneyin.</div>';
+                        sendingCode = false;
+                        return;
                     }
                     // Kod giriş alanını KESINLIKLE göster - birden fazla kez kontrol et
                     const showCodeSection = () => {
@@ -2192,12 +2197,16 @@
                     
                     statusDiv.innerHTML = '<div class="alert alert-success" style="font-size: 16px; font-weight: bold; padding: 15px; border: 2px solid #28a745; border-radius: 8px; background: #d4edda;">✅ <strong style="color: #28a745; font-size: 18px;">SMS KODU GÖNDERİLDİ!</strong><br><br>📱 <strong style="color: #155724;">Aşağıdaki yeşil çerçeveli alana kodu girin</strong> ve "Giriş Yap" butonuna tıklayın.</div>';
                 } else {
+                    console.error('❌ Send Code başarısız:', data);
                     statusDiv.innerHTML = `<div class="alert alert-error">❌ ${data.message}</div>`;
                     codeSent = false; // Hata durumunda tekrar denemeye izin ver
+                    phoneCodeHash = null; // Hash'i sıfırla
                 }
             } catch (error) {
+                console.error('❌ Send Code exception:', error);
                 statusDiv.innerHTML = `<div class="alert alert-error">❌ Hata: ${error.message}</div>`;
                 codeSent = false; // Hata durumunda tekrar denemeye izin ver
+                phoneCodeHash = null; // Hash'i sıfırla
             } finally {
                 sendingCode = false; // Flag'i reset et
             }
@@ -2205,13 +2214,22 @@
         
         // Tek butonla giriş yap
         async function simpleLogin() {
+            console.log('🔵 simpleLogin çağrıldı');
             const phone = document.getElementById('login-phone').value.trim();
             const code = document.getElementById('login-code').value.trim();
             const password = document.getElementById('login-password').value;
             const statusDiv = document.getElementById('login-status');
             const loginBtn = document.getElementById('login-btn');
             
+            console.log('📋 Login bilgileri:', {
+                phone: phone ? phone.substring(0, 5) + '...' : 'YOK',
+                code: code ? code.substring(0, 2) + '...' : 'YOK',
+                codeSent: codeSent,
+                phoneCodeHash: phoneCodeHash ? phoneCodeHash.substring(0, 10) + '...' : 'YOK'
+            });
+            
             if (!phone) {
+                console.warn('⚠️ Telefon numarası yok!');
                 statusDiv.innerHTML = '<div class="alert alert-error">Lütfen telefon numarası girin!</div>';
                 return;
             }
@@ -2278,7 +2296,9 @@
             }
             
             // phone_code_hash kontrolü
+            console.log('🔍 phoneCodeHash kontrolü:', phoneCodeHash ? 'VAR (' + phoneCodeHash.substring(0, 10) + '...)' : 'YOK');
             if (!phoneCodeHash) {
+                console.error('❌ phone_code_hash eksik!');
                 statusDiv.innerHTML = '<div class="alert alert-error">❌ phone_code_hash eksik! Lütfen tekrar kod isteyin.</div>';
                 codeSent = false;
                 phoneCodeHash = null;
@@ -2288,19 +2308,29 @@
             statusDiv.innerHTML = '<div class="loading">Giriş yapılıyor...</div>';
             loginBtn.disabled = true;
             
+            const verifyPayload = {
+                action: 'verify_code', 
+                phone: phone, 
+                code: code,
+                phone_code_hash: phoneCodeHash
+            };
+            console.log('📤 Verify Code Request gönderiliyor:', {
+                action: verifyPayload.action,
+                phone: verifyPayload.phone,
+                code: verifyPayload.code,
+                phone_code_hash: verifyPayload.phone_code_hash ? verifyPayload.phone_code_hash.substring(0, 10) + '...' : 'YOK'
+            });
+            
             try {
                 const response = await fetch('/api/telegram-login', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        action: 'verify_code', 
-                        phone: phone, 
-                        code: code,
-                        phone_code_hash: phoneCodeHash
-                    })
+                    body: JSON.stringify(verifyPayload)
                 });
                 
+                console.log('📥 Verify Code Response status:', response.status);
                 const data = await response.json();
+                console.log('📥 Verify Code Response data:', data);
                 
                 if (data.success) {
                     if (data.requires_password) {
@@ -2318,10 +2348,17 @@
                         }, 2000);
                     }
                 } else {
+                    console.error('❌ Verify Code başarısız:', data);
                     statusDiv.innerHTML = `<div class="alert alert-error">❌ ${data.message}</div>`;
                     loginBtn.disabled = false;
+                    // Hata durumunda hash'i sıfırla, tekrar kod iste
+                    if (data.message && data.message.includes('phone_code_hash')) {
+                        phoneCodeHash = null;
+                        codeSent = false;
+                    }
                 }
             } catch (error) {
+                console.error('❌ Verify Code exception:', error);
                 statusDiv.innerHTML = `<div class="alert alert-error">❌ Hata: ${error.message}</div>`;
                 loginBtn.disabled = false;
             }
