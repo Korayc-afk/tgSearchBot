@@ -938,11 +938,17 @@ def export_results(tenant_id):
 if __name__ == '__main__':
     # Database'i başlat
     print("🔧 Database başlatılıyor...")
-    init_db()
-    create_super_admin()
+    try:
+        init_db()
+        create_super_admin()
+        print("✅ Database hazır!")
+    except Exception as e:
+        print(f"⚠️  Database hatası (devam ediliyor): {e}")
     
+    # Port'u environment variable'dan al (Coolify PORT kullanır)
     port = int(os.environ.get('PORT', 5000))
     print("🌐 Web paneli başlatılıyor...")
-    print(f"📱 Tarayıcıda http://localhost:{port} adresine gidin")
+    print(f"📱 Port: {port}")
+    print(f"🌍 Host: 0.0.0.0")
     app.run(debug=False, host='0.0.0.0', port=port)
 
