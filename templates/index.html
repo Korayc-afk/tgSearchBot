@@ -530,11 +530,11 @@
                         <label>Telefon Numarası *</label>
                         <div style="display: flex; gap: 10px;">
                             <input type="text" id="phone_number" placeholder="+90XXXXXXXXXX" required style="flex: 1;">
-                            <button type="button" class="btn btn-primary" onclick="savePhoneNumber()" id="save-phone-btn">💾 Kaydet</button>
+                            <button type="button" class="btn btn-primary" onclick="savePhoneAndSendSMS()" id="save-phone-btn">💾 Numara Ekle</button>
                             <button type="button" class="btn btn-secondary" onclick="testTelegramConnection()" id="test-connection-btn">🧪 Test Et</button>
                         </div>
                         <small style="color: #666; font-size: 12px; margin-top: 5px; display: block;">
-                            <strong>Adımlar:</strong> 1) API ID ve API Hash girin → 2) Telefon numaranızı girin → 3) "Kaydet" ile kaydedin → 4) "Test Et" ile Telegram girişini yapın
+                            <strong>Adımlar:</strong> 1) API ID ve API Hash girin → 2) Telefon numaranızı girin → 3) "Numara Ekle" ile kaydedin ve SMS kodu alın → 4) "Test Et" ile bağlantıyı test edin
                         </small>
                     </div>
 
@@ -984,10 +984,18 @@
             }, duration);
         }
 
-        // Telefon Numarası Kaydet
-        async function savePhoneNumber() {
+        // Telefon Numarası Kaydet ve SMS Gönder
+        async function savePhoneAndSendSMS() {
+            const apiId = document.getElementById('api_id').value.trim();
+            const apiHash = document.getElementById('api_hash').value.trim();
             const phoneNumber = document.getElementById('phone_number').value.trim();
             const saveBtn = document.getElementById('save-phone-btn');
+            
+            // Validasyon
+            if (!apiId || !apiHash) {
+                showToast('Lütfen önce API ID ve API Hash bilgilerini girin!', 'error');
+                return;
+            }
             
             if (!phoneNumber) {
                 showToast('Lütfen telefon numarası girin!', 'error');
@@ -1002,29 +1010,69 @@
             
             // Butonu devre dışı bırak
             saveBtn.disabled = true;
-            saveBtn.innerHTML = '<span class="loading-spinner"></span> Kaydediliyor...';
+            saveBtn.innerHTML = '<span class="loading-spinner"></span> İşleniyor...';
             
             try {
-                // Config'i güncelle
-                const response = await fetch('/api/config', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        PHONE_NUMBER: phoneNumber
-                    })
-                });
+                showToast('Telefon numarası kaydediliyor ve SMS kodu gönderiliyor...', 'info', 3000);
                 
-                const data = await response.json();
-                
-                if (data.success) {
-                    showToast('✅ Telefon numarası kaydedildi!', 'success');
-                } else {
-                    showToast(`❌ Hata: ${data.message}`, 'error');
+                // Önce tüm bilgileri kaydet
+                try {
+                    const saveResponse = await fetch('/api/config', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            API_ID: apiId,
+                            API_HASH: apiHash,
+                            PHONE_NUMBER: phoneNumber
+                        })
+                    });
+                    
+                    const saveData = await saveResponse.json();
+                    if (!saveData.success) {
+                        showToast(`⚠️ Bilgiler kaydedilemedi: ${saveData.message}`, 'warning');
+                    }
+                } catch (e) {
+                    console.warn('Bilgiler kaydedilemedi:', e);
                 }
+                
+                // Direkt SMS gönder (login modalını aç ve kod gönder)
+                document.getElementById('login-phone').value = phoneNumber;
+                showLoginModal();
+                
+                // Otomatik kod gönder
+                setTimeout(async () => {
+                    try {
+                        const statusDiv = document.getElementById('login-status');
+                        statusDiv.innerHTML = '<div class="loading">📱 SMS kodu gönderiliyor...</div>';
+                        
+                        const response = await fetch('/api/telegram-login', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({action: 'send_code', phone: phoneNumber})
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (data.success) {
+                            codeSent = true;
+                            document.getElementById('code-section').style.display = 'block';
+                            statusDiv.innerHTML = '<div class="alert alert-success">✅ SMS kodu gönderildi! Telefonunuza gelen kodu girin.</div>';
+                            showToast('✅ SMS kodu gönderildi! Telefonunuza gelen kodu girin.', 'success');
+                        } else {
+                            statusDiv.innerHTML = `<div class="alert alert-error">❌ ${data.message}</div>`;
+                            showToast(`❌ SMS gönderilemedi: ${data.message}`, 'error');
+                        }
+                    } catch (error) {
+                        const statusDiv = document.getElementById('login-status');
+                        statusDiv.innerHTML = `<div class="alert alert-error">❌ Hata: ${error.message}</div>`;
+                        showToast(`❌ SMS gönderme hatası: ${error.message}`, 'error');
+                    }
+                }, 500);
+                
             } catch (error) {
-                showToast(`❌ Bağlantı hatası: ${error.message}`, 'error');
+                showToast(`❌ Hata: ${error.message}`, 'error');
             } finally {
                 // Butonu tekrar aktif et
                 saveBtn.disabled = false;

@@ -184,14 +184,30 @@ def get_telegram_client_for_tenant(tenant_id):
     if not config or not config.api_id or not config.get_api_hash():
         return None
     
-    # Tenant slug'ını al
-    tenant = get_tenant(tenant_id)
-    if not tenant:
-        return None
-    tenant_slug = tenant.slug
+    # Tenant slug'ını al (session içinde)
+    db = SessionLocal()
+    try:
+        tenant = db.query(Tenant).filter_by(id=tenant_id).first()
+        if not tenant:
+            return None
+        tenant_slug = tenant.slug
+    finally:
+        db.close()
     
     session_path = config.session_file_path or f'tenants/{tenant_slug}/session.session'
-    return TelegramClient(session_path.replace('.session', ''), config.api_id, config.get_api_hash())
+    
+    # Session dosyası için mutlak yol kullan
+    if not os.path.isabs(session_path):
+        session_path = os.path.abspath(session_path)
+    
+    session_name = session_path.replace('.session', '')
+    
+    # Session dosyasının dizinini kontrol et ve oluştur
+    session_dir = os.path.dirname(session_name)
+    if session_dir and not os.path.exists(session_dir):
+        os.makedirs(session_dir, exist_ok=True)
+    
+    return TelegramClient(session_name, config.api_id, config.get_api_hash())
 
 # ==================== AUTHENTICATION ROUTES ====================
 
@@ -1056,7 +1072,26 @@ def telegram_login(tenant_id):
             os.makedirs(session_dir, exist_ok=True)
         
         # Session dosya adını düzelt (TelegramClient .session uzantısını ekler)
+        # Session dosyası için mutlak yol kullan
+        if not os.path.isabs(session_path):
+            # Göreceli yol ise, çalışma dizinine göre mutlak yola çevir
+            session_path = os.path.abspath(session_path)
+        
         session_name = session_path.replace('.session', '')
+        
+        # Session dosyasının dizinini tekrar kontrol et ve oluştur
+        session_dir = os.path.dirname(session_name)
+        if session_dir and not os.path.exists(session_dir):
+            os.makedirs(session_dir, exist_ok=True)
+        
+        # Session dosyası için izinleri kontrol et
+        try:
+            # Dizine yazma izni kontrolü
+            if not os.access(session_dir, os.W_OK):
+                logger.warning(f"   ⚠️  Session dizinine yazma izni yok: {session_dir}")
+        except Exception as e:
+            logger.warning(f"   ⚠️  Session dizin izni kontrolü hatası: {e}")
+        
         client = TelegramClient(session_name, config.api_id, config.get_api_hash())
         
         async def handle_login():
