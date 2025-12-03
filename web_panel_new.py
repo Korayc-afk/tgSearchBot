@@ -1171,36 +1171,56 @@ def export_results(tenant_id):
 def get_config_api_legacy():
     """Config'i getir (eski format)"""
     try:
+        logger.info("📥 GET /api/config çağrıldı")
         tenant_id = get_current_tenant_id()
+        logger.info(f"   Tenant ID: {tenant_id}")
+        
         if not tenant_id:
+            logger.warning("   ⚠️  Tenant bulunamadı!")
             return jsonify({'success': False, 'message': 'Tenant bulunamadı! Lütfen önce bir grup oluşturun.'})
-    
-    config = get_tenant_config(tenant_id)
-    if not config:
-        return jsonify({'success': False, 'message': 'Config bulunamadı!'})
-    
-    # Eski format
-    return jsonify({
-        'API_ID': config.api_id or '',
-        'API_HASH': '***' if config.api_hash_encrypted else '',
-        'PHONE_NUMBER': config.phone_number or '',
-        'GROUP_IDS': config.group_ids or [],
-        'SEARCH_KEYWORDS': config.search_keywords or [],
-        'SEARCH_LINKS': config.search_links or [],
-        'SCAN_TIME_RANGE': config.scan_time_range or '7days'
-    })
+        
+        config = get_tenant_config(tenant_id)
+        if not config:
+            logger.warning(f"   ⚠️  Config bulunamadı (tenant_id: {tenant_id})")
+            return jsonify({'success': False, 'message': 'Config bulunamadı!'})
+        
+        logger.info("   ✅ Config başarıyla alındı")
+        # Eski format
+        return jsonify({
+            'API_ID': config.api_id or '',
+            'API_HASH': '***' if config.api_hash_encrypted else '',
+            'PHONE_NUMBER': config.phone_number or '',
+            'GROUP_IDS': config.group_ids or [],
+            'SEARCH_KEYWORDS': config.search_keywords or [],
+            'SEARCH_LINKS': config.search_links or [],
+            'SCAN_TIME_RANGE': config.scan_time_range or '7days'
+        })
+    except Exception as e:
+        logger.error(f"   ❌ Hata: {str(e)}")
+        logger.error(f"   Traceback: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}'}), 500
 
 @app.route('/api/config', methods=['POST'])
 @login_required
 def save_config_api_legacy():
     """Config'i kaydet (eski format)"""
     try:
-        tenant_id = get_current_tenant_id()
-        if not tenant_id:
-            return jsonify({'success': False, 'message': 'Tenant bulunamadı! Lütfen önce bir grup oluşturun.'})
-    
-    try:
+        logger.info("📥 POST /api/config çağrıldı")
+        
+        if not request.is_json:
+            logger.error("   ❌ Request JSON değil!")
+            return jsonify({'success': False, 'message': 'Request JSON formatında olmalı!'}), 400
+        
         data = request.json
+        logger.info(f"   Request Data: {json.dumps(data, indent=2, ensure_ascii=False)}")
+        
+        tenant_id = get_current_tenant_id()
+        logger.info(f"   Tenant ID: {tenant_id}")
+        
+        if not tenant_id:
+            logger.warning("   ⚠️  Tenant bulunamadı!")
+            return jsonify({'success': False, 'message': 'Tenant bulunamadı! Lütfen önce bir grup oluşturun.'})
+        
         update_data = {}
         
         if 'API_ID' in data:
@@ -1218,13 +1238,19 @@ def save_config_api_legacy():
         if 'SCAN_TIME_RANGE' in data:
             update_data['scan_time_range'] = data['SCAN_TIME_RANGE']
         
+        logger.info(f"   Update Data: {update_data}")
+        
         config = update_tenant_config(tenant_id, **update_data)
         if config:
+            logger.info("   ✅ Config başarıyla güncellendi")
             return jsonify({'success': True, 'message': 'Ayarlar kaydedildi!'})
         else:
+            logger.warning("   ⚠️  Config bulunamadı veya güncellenemedi")
             return jsonify({'success': False, 'message': 'Config bulunamadı!'})
     except Exception as e:
-        return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
+        logger.error(f"   ❌ Hata: {str(e)}")
+        logger.error(f"   Traceback: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}'}), 500
 
 @app.route('/api/groups', methods=['GET'])
 @login_required
@@ -1307,23 +1333,33 @@ def get_results_legacy():
 @login_required
 def clear_results_legacy():
     """Sonuçları temizle (eski format)"""
-    tenant_id = get_current_tenant_id()
-    if not tenant_id:
-        return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
-    
     try:
+        logger.info("📥 POST /api/results/clear çağrıldı")
+        
+        tenant_id = get_current_tenant_id()
+        logger.info(f"   Tenant ID: {tenant_id}")
+        
+        if not tenant_id:
+            logger.warning("   ⚠️  Tenant bulunamadı!")
+            return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
+        
         db = SessionLocal()
         try:
-            db.query(Result).filter_by(tenant_id=tenant_id).delete()
+            deleted_count = db.query(Result).filter_by(tenant_id=tenant_id).delete()
             db.commit()
+            logger.info(f"   ✅ {deleted_count} sonuç silindi")
             return jsonify({'success': True, 'message': 'Sonuçlar temizlendi!'})
         except Exception as e:
             db.rollback()
+            logger.error(f"   ❌ Database hatası: {str(e)}")
+            logger.error(f"   Traceback: {traceback.format_exc()}")
             return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
         finally:
             db.close()
     except Exception as e:
-        return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
+        logger.error(f"   ❌ Hata: {str(e)}")
+        logger.error(f"   Traceback: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}'}), 500
 
 @app.route('/api/telegram-login', methods=['POST'])
 @login_required
@@ -1379,23 +1415,39 @@ def start_scan_legacy():
 @login_required
 def get_scan_status_legacy():
     """Tarama durumunu al (eski format)"""
-    tenant_id = get_current_tenant_id()
-    if not tenant_id:
-        return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
-    
-    return get_scan_status_api(tenant_id)
+    try:
+        logger.info("📥 GET /api/scan-status çağrıldı")
+        
+        tenant_id = get_current_tenant_id()
+        logger.info(f"   Tenant ID: {tenant_id}")
+        
+        if not tenant_id:
+            logger.warning("   ⚠️  Tenant bulunamadı!")
+            return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
+        
+        return get_scan_status_api(tenant_id)
+    except Exception as e:
+        logger.error(f"   ❌ Hata: {str(e)}")
+        logger.error(f"   Traceback: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}'}), 500
 
 @app.route('/api/test-telegram', methods=['POST'])
 @login_required
 def test_telegram_legacy():
     """Telegram API testi (eski format)"""
-    tenant_id = get_current_tenant_id()
-    if not tenant_id:
-        return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
-    
     try:
+        logger.info("📥 POST /api/test-telegram çağrıldı")
+        
+        tenant_id = get_current_tenant_id()
+        logger.info(f"   Tenant ID: {tenant_id}")
+        
+        if not tenant_id:
+            logger.warning("   ⚠️  Tenant bulunamadı!")
+            return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
+        
         client = get_telegram_client_for_tenant(tenant_id)
         if not client:
+            logger.warning("   ⚠️  Telegram client oluşturulamadı (API bilgileri eksik)")
             return jsonify({'success': False, 'message': 'API bilgileri eksik!'})
         
         async def test():
@@ -1403,15 +1455,18 @@ def test_telegram_legacy():
                 await client.connect()
                 if await client.is_user_authorized():
                     await client.disconnect()
+                    logger.info("   ✅ Telegram bağlantısı başarılı")
                     return {'success': True, 'message': 'Telegram bağlantısı başarılı!'}
                 else:
                     await client.disconnect()
+                    logger.warning("   ⚠️  Telegram girişi yapılmamış")
                     return {'success': False, 'message': 'Telegram girişi yapılmamış!'}
             except Exception as e:
                 try:
                     await client.disconnect()
                 except:
                     pass
+                logger.error(f"   ❌ Telegram test hatası: {str(e)}")
                 return {'success': False, 'message': f'Hata: {str(e)}'}
         
         loop = asyncio.new_event_loop()
@@ -1423,7 +1478,9 @@ def test_telegram_legacy():
         
         return jsonify(result)
     except Exception as e:
-        return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
+        logger.error(f"   ❌ Hata: {str(e)}")
+        logger.error(f"   Traceback: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}'}), 500
 
 if __name__ == '__main__':
     # Database'i başlat
