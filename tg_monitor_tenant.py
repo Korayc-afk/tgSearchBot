@@ -33,13 +33,20 @@ class TelegramMonitorTenant:
         self.db = SessionLocal()
         
         # Tenant bilgilerini al
-        self.tenant = self.db.query(Tenant).filter_by(id=tenant_id).first()
-        if not self.tenant:
+        tenant = self.db.query(Tenant).filter_by(id=tenant_id).first()
+        if not tenant:
+            self.db.close()
             raise ValueError(f"Tenant bulunamadı: {tenant_id}")
+        
+        # Tenant slug'ını al (session dışında kullanmak için)
+        tenant_slug = tenant.slug
+        self.db.expunge(tenant)
+        self.tenant_slug = tenant_slug  # Sadece slug'ı sakla
         
         # Config'i al
         self.config = self.db.query(TenantConfig).filter_by(tenant_id=tenant_id).first()
         if not self.config:
+            self.db.close()
             raise ValueError(f"Tenant config bulunamadı: {tenant_id}")
         
         # Telegram client oluştur
@@ -47,9 +54,10 @@ class TelegramMonitorTenant:
         api_hash = self.config.get_api_hash()
         
         if not api_id or not api_hash:
+            self.db.close()
             raise ValueError("API ID veya API Hash bulunamadı!")
         
-        session_path = self.config.session_file_path or f'tenants/{self.tenant.slug}/session.session'
+        session_path = self.config.session_file_path or f'tenants/{self.tenant_slug}/session.session'
         self.client = TelegramClient(session_path.replace('.session', ''), api_id, api_hash)
         
         # Arama ayarları
@@ -69,7 +77,7 @@ class TelegramMonitorTenant:
     
     async def start(self):
         """Botu başlat"""
-        session_file = self.config.session_file_path or f'tenants/{self.tenant.slug}/session.session'
+        session_file = self.config.session_file_path or f'tenants/{self.tenant_slug}/session.session'
         
         if os.path.exists(session_file):
             await self.client.connect()
@@ -434,7 +442,7 @@ class TelegramMonitorTenant:
     async def save_result_to_file(self, result, stats):
         """Sonucu dosyaya kaydet (eski format uyumluluğu)"""
         try:
-            results_file = self.config.results_file_path or f'tenants/{self.tenant.slug}/results.txt'
+            results_file = self.config.results_file_path or f'tenants/{self.tenant_slug}/results.txt'
             os.makedirs(os.path.dirname(results_file), exist_ok=True)
             
             with open(results_file, 'a', encoding='utf-8') as f:

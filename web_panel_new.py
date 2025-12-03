@@ -51,7 +51,13 @@ def get_telegram_client_for_tenant(tenant_id):
     if not config or not config.api_id or not config.get_api_hash():
         return None
     
-    session_path = config.session_file_path or f'tenants/{get_tenant(tenant_id).slug}/session.session'
+    # Tenant slug'ını al
+    tenant = get_tenant(tenant_id)
+    if not tenant:
+        return None
+    tenant_slug = tenant.slug
+    
+    session_path = config.session_file_path or f'tenants/{tenant_slug}/session.session'
     return TelegramClient(session_path.replace('.session', ''), config.api_id, config.get_api_hash())
 
 # ==================== AUTHENTICATION ROUTES ====================
@@ -96,16 +102,31 @@ def serve_logo():
 @app.route('/')
 @login_required
 def index():
-    """Ana sayfa - Süper admin veya normal admin"""
+    """Ana sayfa - Herkes aynı paneli görür, sadece veriler farklı"""
+    # Kullanıcının tenant'ını belirle
+    tenant_id = None
+    tenant_name = None
+    
     if current_user.is_super_admin:
-        return redirect(url_for('super_admin_dashboard'))
+        # Süper admin ise tüm tenant'ları görebilir, varsayılan olarak ilkini seç
+        db = SessionLocal()
+        try:
+            first_tenant = db.query(Tenant).filter_by(is_active=True).first()
+            if first_tenant:
+                tenant_id = first_tenant.id
+                tenant_name = first_tenant.name
+        finally:
+            db.close()
     else:
-        # Normal admin için ilk tenant'ına yönlendir
+        # Normal admin için ilk tenant'ını al
         user_tenants = get_user_tenants(current_user.id)
         if user_tenants:
-            return redirect(url_for('admin_dashboard', tenant_id=user_tenants[0].id))
+            tenant_id = user_tenants[0].id
+            tenant_name = user_tenants[0].name
         else:
             return render_template('no_tenant.html')
+    
+    return render_template('index.html', tenant_id=tenant_id, tenant_name=tenant_name or 'Telegram Monitoring', is_super_admin=current_user.is_super_admin)
 
 @app.route('/super-admin')
 @login_required
@@ -596,7 +617,12 @@ def start_scan_api(tenant_id):
         if not config.group_ids:
             return jsonify({'success': False, 'message': 'Grup seçilmedi!'})
         
-        session_file = config.session_file_path or f'tenants/{get_tenant(tenant_id).slug}/session.session'
+        # Tenant slug'ını al
+        tenant = get_tenant(tenant_id)
+        if not tenant:
+            return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
+        tenant_slug = tenant.slug
+        session_file = config.session_file_path or f'tenants/{tenant_slug}/session.session'
         if not os.path.exists(session_file):
             return jsonify({'success': False, 'message': 'Telegram girişi yapılmamış!'})
         
@@ -725,7 +751,12 @@ def telegram_login(tenant_id):
         if not config or not config.api_id or not config.get_api_hash():
             return jsonify({'success': False, 'message': 'API bilgileri eksik!'})
         
-        session_path = config.session_file_path or f'tenants/{get_tenant(tenant_id).slug}/session.session'
+        # Tenant slug'ını al
+        tenant = get_tenant(tenant_id)
+        if not tenant:
+            return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
+        tenant_slug = tenant.slug
+        session_path = config.session_file_path or f'tenants/{tenant_slug}/session.session'
         client = TelegramClient(session_path.replace('.session', ''), config.api_id, config.get_api_hash())
         
         async def handle_login():
