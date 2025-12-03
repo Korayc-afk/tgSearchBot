@@ -37,12 +37,24 @@ bot_logs = {}  # {tenant_id: [logs]}
 
 def get_current_tenant_id():
     """Mevcut kullanıcının tenant ID'sini al"""
-    tenant_id = request.args.get('tenant_id') or request.json.get('tenant_id') if request.is_json else None
-    if not tenant_id and not current_user.is_super_admin:
-        # Normal kullanıcı ise ilk tenant'ını al
-        user_tenants = get_user_tenants(current_user.id)
-        if user_tenants:
-            tenant_id = user_tenants[0].id
+    tenant_id = request.args.get('tenant_id') or (request.json.get('tenant_id') if request.is_json else None)
+    
+    if not tenant_id:
+        if current_user.is_super_admin:
+            # Süper admin ise ilk aktif tenant'ı al
+            db = SessionLocal()
+            try:
+                first_tenant = db.query(Tenant).filter_by(is_active=True).first()
+                if first_tenant:
+                    tenant_id = first_tenant.id
+            finally:
+                db.close()
+        else:
+            # Normal kullanıcı ise ilk tenant'ını al
+            user_tenants = get_user_tenants(current_user.id)
+            if user_tenants:
+                tenant_id = user_tenants[0].id
+    
     return tenant_id
 
 def get_telegram_client_for_tenant(tenant_id):
