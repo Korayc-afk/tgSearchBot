@@ -1,0 +1,948 @@
+"""
+Telegram Monitoring Bot - Web Panel (Multi-Tenant)
+Flask tabanlı web arayüzü - Çoklu grup desteği
+"""
+
+from flask import Flask, render_template, request, jsonify, send_from_directory, redirect, url_for
+from flask_cors import CORS
+from flask_login import login_user, logout_user, login_required, current_user
+import asyncio
+import json
+import os
+import subprocess
+import threading
+from datetime import datetime, timedelta
+from telethon import TelegramClient
+from database import init_db, create_super_admin, SessionLocal, User, Tenant, TenantConfig, Result, MessageStatistics
+from auth import login_manager, verify_password, require_super_admin, require_tenant_access
+from tenant_manager import (
+    create_tenant, get_tenant, get_tenant_by_slug, get_user_tenants,
+    update_tenant, delete_tenant, get_tenant_config, update_tenant_config,
+    add_user_to_tenant, remove_user_from_tenant, get_tenant_users
+)
+
+app = Flask(__name__, static_folder='.')
+app.secret_key = os.environ.get('SECRET_KEY', 'padisah-telegram-monitoring-secret-key-change-in-production')
+CORS(app)
+
+# Flask-Login'i başlat
+login_manager.init_app(app)
+
+# Bot process tracking (tenant bazlı)
+bot_processes = {}  # {tenant_id: process}
+bot_statuses = {}  # {tenant_id: status}
+bot_logs = {}  # {tenant_id: [logs]}
+
+# ==================== HELPER FUNCTIONS ====================
+
+def get_current_tenant_id():
+    """Mevcut kullanıcının tenant ID'sini al"""
+    tenant_id = request.args.get('tenant_id') or request.json.get('tenant_id') if request.is_json else None
+    if not tenant_id and not current_user.is_super_admin:
+        # Normal kullanıcı ise ilk tenant'ını al
+        user_tenants = get_user_tenants(current_user.id)
+        if user_tenants:
+            tenant_id = user_tenants[0].id
+    return tenant_id
+
+def get_telegram_client_for_tenant(tenant_id):
+    """Tenant için Telegram client oluştur"""
+    config = get_tenant_config(tenant_id)
+    if not config or not config.api_id or not config.get_api_hash():
+        return None
+    
+    session_path = config.session_file_path or f'tenants/{get_tenant(tenant_id).slug}/session.session'
+    return TelegramClient(session_path.replace('.session', ''), config.api_id, config.get_api_hash())
+
+# ==================== AUTHENTICATION ROUTES ====================
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Login sayfası"""
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        
+        user = verify_password(username, password)
+        if user:
+            login_user(user, remember=True)
+            return redirect(url_for('index'))
+        else:
+            return render_template('login.html', error='Kullanıcı adı veya şifre hatalı!')
+    
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    """Çıkış yap"""
+    logout_user()
+    return redirect(url_for('login'))
+
+# ==================== MAIN ROUTES ====================
+
+@app.route('/')
+@login_required
+def index():
+    """Ana sayfa - Süper admin veya normal admin"""
+    if current_user.is_super_admin:
+        return redirect(url_for('super_admin_dashboard'))
+    else:
+        # Normal admin için ilk tenant'ına yönlendir
+        user_tenants = get_user_tenants(current_user.id)
+        if user_tenants:
+            return redirect(url_for('admin_dashboard', tenant_id=user_tenants[0].id))
+        else:
+            return render_template('no_tenant.html')
+
+@app.route('/super-admin')
+@login_required
+@require_super_admin
+def super_admin_dashboard():
+    """Süper admin dashboard"""
+    return render_template('super_admin.html')
+
+@app.route('/admin/<int:tenant_id>')
+@login_required
+@require_tenant_access('tenant_id')
+def admin_dashboard(tenant_id):
+    """Normal admin dashboard"""
+    tenant = get_tenant(tenant_id)
+    if not tenant:
+        return redirect(url_for('index'))
+    return render_template('admin.html', tenant_id=tenant_id, tenant_name=tenant.name)
+
+# ==================== SUPER ADMIN API ROUTES ====================
+
+@app.route('/api/super-admin/dashboard')
+@login_required
+@require_super_admin
+def super_admin_dashboard_data():
+    """Süper admin dashboard verileri"""
+    db = SessionLocal()
+    try:
+        # Tüm tenant'lar
+        tenants = db.query(Tenant).filter_by(is_active=True).all()
+        
+        # İstatistikler
+        total_tenants = len(tenants)
+        total_users = db.query(User).count()
+        total_results = db.query(Result).count()
+        
+        # Son 7 günün istatistikleri
+        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        recent_results = db.query(Result).filter(Result.timestamp >= seven_days_ago).count()
+        
+        # Tenant bazında istatistikler
+        tenant_stats = []
+        for tenant in tenants:
+            tenant_result_count = db.query(Result).filter_by(tenant_id=tenant.id).count()
+            tenant_stats.append({
+                'id': tenant.id,
+                'name': tenant.name,
+                'slug': tenant.slug,
+                'result_count': tenant_result_count,
+                'created_at': tenant.created_at.isoformat() if tenant.created_at else None
+            })
+        
+        return jsonify({
+            'success': True,
+            'stats': {
+                'total_tenants': total_tenants,
+                'total_users': total_users,
+                'total_results': total_results,
+                'recent_results': recent_results
+            },
+            'tenants': [{
+                'id': t.id,
+                'name': t.name,
+                'slug': t.slug,
+                'is_active': t.is_active,
+                'created_at': t.created_at.isoformat() if t.created_at else None
+            } for t in tenants],
+            'tenant_stats': tenant_stats
+        })
+    finally:
+        db.close()
+
+@app.route('/api/super-admin/tenants', methods=['GET'])
+@login_required
+@require_super_admin
+def list_tenants():
+    """Tüm tenant'ları listele"""
+    db = SessionLocal()
+    try:
+        tenants = db.query(Tenant).all()
+        return jsonify({
+            'success': True,
+            'tenants': [{
+                'id': t.id,
+                'name': t.name,
+                'slug': t.slug,
+                'is_active': t.is_active,
+                'created_at': t.created_at.isoformat() if t.created_at else None,
+                'created_by': t.created_by
+            } for t in tenants]
+        })
+    finally:
+        db.close()
+
+@app.route('/api/super-admin/tenants', methods=['POST'])
+@login_required
+@require_super_admin
+def create_tenant_api():
+    """Yeni tenant oluştur"""
+    try:
+        data = request.json
+        name = data.get('name', '').strip()
+        
+        if not name:
+            return jsonify({'success': False, 'message': 'Grup adı gerekli!'})
+        
+        tenant = create_tenant(name, current_user.id)
+        return jsonify({
+            'success': True,
+            'message': 'Grup başarıyla oluşturuldu!',
+            'tenant': {
+                'id': tenant.id,
+                'name': tenant.name,
+                'slug': tenant.slug
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
+
+@app.route('/api/super-admin/tenants/<int:tenant_id>', methods=['PUT'])
+@login_required
+@require_super_admin
+def update_tenant_api(tenant_id):
+    """Tenant'ı güncelle"""
+    try:
+        data = request.json
+        name = data.get('name')
+        is_active = data.get('is_active')
+        
+        tenant = update_tenant(tenant_id, name=name, is_active=is_active)
+        if tenant:
+            return jsonify({'success': True, 'message': 'Grup güncellendi!'})
+        else:
+            return jsonify({'success': False, 'message': 'Grup bulunamadı!'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
+
+@app.route('/api/super-admin/tenants/<int:tenant_id>', methods=['DELETE'])
+@login_required
+@require_super_admin
+def delete_tenant_api(tenant_id):
+    """Tenant'ı sil"""
+    try:
+        if delete_tenant(tenant_id):
+            return jsonify({'success': True, 'message': 'Grup silindi!'})
+        else:
+            return jsonify({'success': False, 'message': 'Grup bulunamadı!'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
+
+@app.route('/api/super-admin/users', methods=['GET'])
+@login_required
+@require_super_admin
+def list_users():
+    """Tüm kullanıcıları listele"""
+    db = SessionLocal()
+    try:
+        users = db.query(User).all()
+        return jsonify({
+            'success': True,
+            'users': [{
+                'id': u.id,
+                'username': u.username,
+                'role': u.role,
+                'last_login': u.last_login.isoformat() if u.last_login else None,
+                'created_at': u.created_at.isoformat() if u.created_at else None
+            } for u in users]
+        })
+    finally:
+        db.close()
+
+@app.route('/api/super-admin/users', methods=['POST'])
+@login_required
+@require_super_admin
+def create_user():
+    """Yeni kullanıcı oluştur"""
+    try:
+        from hashlib import sha256
+        
+        data = request.json
+        username = data.get('username', '').strip()
+        password = data.get('password', '')
+        role = data.get('role', 'admin')
+        tenant_ids = data.get('tenant_ids', [])  # Kullanıcının erişebileceği tenant'lar
+        
+        if not username or not password:
+            return jsonify({'success': False, 'message': 'Kullanıcı adı ve şifre gerekli!'})
+        
+        db = SessionLocal()
+        try:
+            # Kullanıcı zaten var mı?
+            existing = db.query(User).filter_by(username=username).first()
+            if existing:
+                return jsonify({'success': False, 'message': 'Bu kullanıcı adı zaten kullanılıyor!'})
+            
+            # Yeni kullanıcı oluştur
+            password_hash = sha256(password.encode()).hexdigest()
+            user = User(username=username, password_hash=password_hash, role=role)
+            db.add(user)
+            db.flush()
+            
+            # Tenant'lara ekle
+            for tenant_id in tenant_ids:
+                add_user_to_tenant(user.id, tenant_id, role='owner')
+            
+            db.commit()
+            return jsonify({'success': True, 'message': 'Kullanıcı oluşturuldu!'})
+        except Exception as e:
+            db.rollback()
+            return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
+        finally:
+            db.close()
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
+
+@app.route('/api/super-admin/tenants/<int:tenant_id>/results')
+@login_required
+@require_super_admin
+def get_tenant_results(tenant_id):
+    """Tenant'ın sonuçlarını al (süper admin)"""
+    db = SessionLocal()
+    try:
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        query = db.query(Result).filter_by(tenant_id=tenant_id)
+        
+        if start_date:
+            query = query.filter(Result.timestamp >= datetime.strptime(start_date, '%Y-%m-%d'))
+        if end_date:
+            query = query.filter(Result.timestamp <= datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1))
+        
+        results = query.order_by(Result.timestamp.desc()).limit(1000).all()
+        
+        return jsonify({
+            'success': True,
+            'results': [{
+                'id': r.id,
+                'timestamp': r.timestamp.isoformat(),
+                'group_name': r.group_name,
+                'group_id': r.group_id,
+                'message_text': r.message_text,
+                'found_keywords': r.found_keywords,
+                'found_links': r.found_links,
+                'message_link': r.message_link,
+                'views_count': r.views_count,
+                'forwards_count': r.forwards_count,
+                'reactions_count': r.reactions_count,
+                'reactions_detail': r.reactions_detail,
+                'replies_count': r.replies_count
+            } for r in results]
+        })
+    finally:
+        db.close()
+
+# ==================== ADMIN API ROUTES ====================
+
+@app.route('/api/admin/<int:tenant_id>/config', methods=['GET'])
+@login_required
+@require_tenant_access('tenant_id')
+def get_tenant_config_api(tenant_id):
+    """Tenant config'ini al"""
+    config = get_tenant_config(tenant_id)
+    if not config:
+        return jsonify({'success': False, 'message': 'Config bulunamadı!'})
+    
+    return jsonify({
+        'success': True,
+        'config': {
+            'api_id': config.api_id,
+            'api_hash': '***' if config.api_hash_encrypted else '',
+            'phone_number': config.phone_number,
+            'group_ids': config.group_ids or [],
+            'search_keywords': config.search_keywords or [],
+            'search_links': config.search_links or [],
+            'scan_time_range': config.scan_time_range or '7days'
+        }
+    })
+
+@app.route('/api/admin/<int:tenant_id>/config', methods=['POST'])
+@login_required
+@require_tenant_access('tenant_id')
+def save_tenant_config_api(tenant_id):
+    """Tenant config'ini kaydet"""
+    try:
+        data = request.json
+        
+        update_data = {}
+        if 'api_id' in data:
+            update_data['api_id'] = data['api_id']
+        if 'api_hash' in data and data['api_hash'] != '***':
+            update_data['api_hash'] = data['api_hash']
+        if 'phone_number' in data:
+            update_data['phone_number'] = data['phone_number']
+        if 'group_ids' in data:
+            update_data['group_ids'] = data['group_ids']
+        if 'search_keywords' in data:
+            update_data['search_keywords'] = [kw.strip() for kw in data['search_keywords'] if kw.strip()]
+        if 'search_links' in data:
+            update_data['search_links'] = [link.strip() for link in data['search_links'] if link.strip()]
+        if 'scan_time_range' in data:
+            update_data['scan_time_range'] = data['scan_time_range']
+        
+        config = update_tenant_config(tenant_id, **update_data)
+        if config:
+            return jsonify({'success': True, 'message': 'Ayarlar kaydedildi!'})
+        else:
+            return jsonify({'success': False, 'message': 'Config bulunamadı!'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
+
+@app.route('/api/admin/<int:tenant_id>/results', methods=['GET'])
+@login_required
+@require_tenant_access('tenant_id')
+def get_results_api(tenant_id):
+    """Sonuçları al"""
+    db = SessionLocal()
+    try:
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        limit = int(request.args.get('limit', 100))
+        
+        query = db.query(Result).filter_by(tenant_id=tenant_id)
+        
+        if start_date:
+            query = query.filter(Result.timestamp >= datetime.strptime(start_date, '%Y-%m-%d'))
+        if end_date:
+            query = query.filter(Result.timestamp <= datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1))
+        
+        results = query.order_by(Result.timestamp.desc()).limit(limit).all()
+        
+        return jsonify({
+            'success': True,
+            'results': [{
+                'id': r.id,
+                'timestamp': r.timestamp.isoformat(),
+                'group_name': r.group_name,
+                'group_id': r.group_id,
+                'message_text': r.message_text,
+                'found_keywords': r.found_keywords,
+                'found_links': r.found_links,
+                'message_link': r.message_link,
+                'views_count': r.views_count,
+                'forwards_count': r.forwards_count,
+                'reactions_count': r.reactions_count,
+                'reactions_detail': r.reactions_detail,
+                'replies_count': r.replies_count
+            } for r in results]
+        })
+    finally:
+        db.close()
+
+@app.route('/api/admin/<int:tenant_id>/statistics', methods=['GET'])
+@login_required
+@require_tenant_access('tenant_id')
+def get_statistics_api(tenant_id):
+    """İstatistikleri al"""
+    db = SessionLocal()
+    try:
+        days = int(request.args.get('days', 30))
+        start_date = datetime.utcnow() - timedelta(days=days)
+        
+        # Günlük istatistikler
+        daily_stats = db.query(MessageStatistics).filter(
+            MessageStatistics.tenant_id == tenant_id,
+            MessageStatistics.date >= start_date
+        ).order_by(MessageStatistics.date.asc()).all()
+        
+        # Toplam istatistikler
+        total_results = db.query(Result).filter_by(tenant_id=tenant_id).count()
+        total_views = db.query(Result).filter_by(tenant_id=tenant_id).with_entities(
+            db.func.sum(Result.views_count)
+        ).scalar() or 0
+        total_forwards = db.query(Result).filter_by(tenant_id=tenant_id).with_entities(
+            db.func.sum(Result.forwards_count)
+        ).scalar() or 0
+        
+        # Kelime bazında istatistikler
+        all_results = db.query(Result).filter_by(tenant_id=tenant_id).all()
+        keyword_stats = {}
+        for result in all_results:
+            for keyword in (result.found_keywords or []):
+                keyword_stats[keyword] = keyword_stats.get(keyword, 0) + 1
+        
+        return jsonify({
+            'success': True,
+            'daily_stats': [{
+                'date': stat.date.isoformat(),
+                'total_matches': stat.total_matches,
+                'total_views': stat.total_views,
+                'total_forwards': stat.total_forwards,
+                'total_reactions': stat.total_reactions,
+                'keyword_stats': stat.keyword_stats,
+                'link_stats': stat.link_stats
+            } for stat in daily_stats],
+            'totals': {
+                'total_results': total_results,
+                'total_views': int(total_views),
+                'total_forwards': int(total_forwards)
+            },
+            'keyword_stats': keyword_stats
+        })
+    finally:
+        db.close()
+
+@app.route('/api/admin/<int:tenant_id>/scan', methods=['POST'])
+@login_required
+@require_tenant_access('tenant_id')
+def start_scan_api(tenant_id):
+    """Tarama başlat"""
+    try:
+        config = get_tenant_config(tenant_id)
+        if not config or not config.api_id or not config.get_api_hash():
+            return jsonify({'success': False, 'message': 'API bilgileri eksik!'})
+        
+        if not config.group_ids:
+            return jsonify({'success': False, 'message': 'Grup seçilmedi!'})
+        
+        session_file = config.session_file_path or f'tenants/{get_tenant(tenant_id).slug}/session.session'
+        if not os.path.exists(session_file):
+            return jsonify({'success': False, 'message': 'Telegram girişi yapılmamış!'})
+        
+        # Bot zaten çalışıyor mu?
+        if tenant_id in bot_statuses and bot_statuses[tenant_id].get('running'):
+            return jsonify({'success': False, 'message': 'Bot zaten çalışıyor!'})
+        
+        # Botu başlat
+        bot_process = subprocess.Popen(
+            ['python', 'tg_monitor_tenant.py', str(tenant_id)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            universal_newlines=True
+        )
+        
+        bot_processes[tenant_id] = bot_process
+        bot_statuses[tenant_id] = {
+            'running': True,
+            'start_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        bot_logs[tenant_id] = []
+        
+        # Logları oku
+        def read_logs():
+            try:
+                for line in iter(bot_process.stdout.readline, ''):
+                    if line:
+                        bot_logs[tenant_id].append(line.strip())
+                        if len(bot_logs[tenant_id]) > 1000:
+                            bot_logs[tenant_id] = bot_logs[tenant_id][-500:]
+            except:
+                pass
+            finally:
+                bot_statuses[tenant_id]['running'] = False
+        
+        threading.Thread(target=read_logs, daemon=True).start()
+        
+        return jsonify({'success': True, 'message': 'Tarama başlatıldı!'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
+
+@app.route('/api/admin/<int:tenant_id>/scan/status', methods=['GET'])
+@login_required
+@require_tenant_access('tenant_id')
+def get_scan_status_api(tenant_id):
+    """Tarama durumunu al"""
+    status = bot_statuses.get(tenant_id, {'running': False})
+    logs = bot_logs.get(tenant_id, [])
+    
+    # Process kontrolü
+    if tenant_id in bot_processes:
+        process = bot_processes[tenant_id]
+        try:
+            poll_result = process.poll()
+            if poll_result is not None:
+                status['running'] = False
+        except:
+            status['running'] = False
+    
+    return jsonify({
+        'success': True,
+        'running': status.get('running', False),
+        'start_time': status.get('start_time'),
+        'logs': logs[-50:]  # Son 50 log
+    })
+
+# ==================== TELEGRAM ROUTES ====================
+
+@app.route('/api/admin/<int:tenant_id>/telegram/groups', methods=['GET'])
+@login_required
+@require_tenant_access('tenant_id')
+def get_telegram_groups(tenant_id):
+    """Telegram gruplarını listele"""
+    try:
+        client = get_telegram_client_for_tenant(tenant_id)
+        if not client:
+            return jsonify({'success': False, 'message': 'API bilgileri eksik!', 'groups': []})
+        
+        async def fetch_groups():
+            try:
+                await client.connect()
+                if not await client.is_user_authorized():
+                    raise Exception('Telegram girişi yapılmamış!')
+                
+                groups = []
+                async for dialog in client.iter_dialogs():
+                    if dialog.is_group or dialog.is_channel:
+                        groups.append({
+                            'id': dialog.id,
+                            'name': dialog.name or 'İsimsiz Grup',
+                            'unread': dialog.unread_count,
+                            'is_channel': dialog.is_channel
+                        })
+                        if len(groups) >= 500:
+                            break
+                return groups
+            finally:
+                try:
+                    await client.disconnect()
+                except:
+                    pass
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            groups = loop.run_until_complete(fetch_groups())
+            return jsonify({'success': True, 'groups': groups})
+        finally:
+            loop.close()
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e), 'groups': []})
+
+@app.route('/api/admin/<int:tenant_id>/telegram/login', methods=['POST'])
+@login_required
+@require_tenant_access('tenant_id')
+def telegram_login(tenant_id):
+    """Telegram'a giriş yap"""
+    try:
+        data = request.json
+        action = data.get('action')
+        phone = data.get('phone', '').strip()
+        
+        config = get_tenant_config(tenant_id)
+        if not config or not config.api_id or not config.get_api_hash():
+            return jsonify({'success': False, 'message': 'API bilgileri eksik!'})
+        
+        session_path = config.session_file_path or f'tenants/{get_tenant(tenant_id).slug}/session.session'
+        client = TelegramClient(session_path.replace('.session', ''), config.api_id, config.get_api_hash())
+        
+        async def handle_login():
+            try:
+                await client.connect()
+                
+                if await client.is_user_authorized():
+                    await client.disconnect()
+                    return {'success': True, 'message': 'Zaten giriş yapılmış!', 'requires_password': False}
+                
+                if action == 'send_code':
+                    try:
+                        sent_code = await client.send_code_request(phone)
+                        client.session.save()
+                        await client.disconnect()
+                        return {'success': True, 'message': 'Kod gönderildi!'}
+                    except Exception as e:
+                        error_msg = str(e)
+                        try:
+                            await client.disconnect()
+                        except:
+                            pass
+                        if 'PHONE_NUMBER_INVALID' in error_msg:
+                            return {'success': False, 'message': 'Telefon numarası geçersiz!'}
+                        elif 'FLOOD_WAIT' in error_msg:
+                            return {'success': False, 'message': 'Çok fazla deneme! Lütfen bekleyin.'}
+                        else:
+                            return {'success': False, 'message': f'Hata: {error_msg}'}
+                
+                elif action == 'verify_code':
+                    code = data.get('code', '').strip()
+                    if not code:
+                        return {'success': False, 'message': 'Kod gerekli!'}
+                    
+                    try:
+                        result = await client.sign_in(phone, code)
+                        client.session.save()
+                        await client.disconnect()
+                        
+                        if os.path.exists(session_path):
+                            return {'success': True, 'message': 'Giriş başarılı!', 'requires_password': False}
+                        else:
+                            return {'success': False, 'message': 'Session kaydedilemedi.'}
+                    except Exception as e:
+                        error_msg = str(e)
+                        try:
+                            await client.disconnect()
+                        except:
+                            pass
+                        
+                        if 'PASSWORD' in error_msg or 'SESSION_PASSWORD_NEEDED' in error_msg:
+                            try:
+                                client.session.save()
+                            except:
+                                pass
+                            return {'success': True, 'message': 'İki faktörlü doğrulama gerekiyor', 'requires_password': True}
+                        elif 'PHONE_CODE_INVALID' in error_msg:
+                            return {'success': False, 'message': 'Kod geçersiz!'}
+                        elif 'PHONE_CODE_EXPIRED' in error_msg:
+                            return {'success': False, 'message': 'Kod süresi dolmuş!'}
+                        else:
+                            return {'success': False, 'message': f'Hata: {error_msg}'}
+                
+                elif action == 'verify_password':
+                    password = data.get('password', '')
+                    if not password:
+                        return {'success': False, 'message': 'Şifre gerekli!'}
+                    
+                    try:
+                        await client.sign_in(password=password)
+                        client.session.save()
+                        await client.disconnect()
+                        
+                        if os.path.exists(session_path):
+                            return {'success': True, 'message': 'Giriş başarılı!'}
+                        else:
+                            return {'success': False, 'message': 'Session kaydedilemedi.'}
+                    except Exception as e:
+                        error_msg = str(e)
+                        try:
+                            await client.disconnect()
+                        except:
+                            pass
+                        if 'PASSWORD' in error_msg:
+                            return {'success': False, 'message': 'Şifre yanlış!'}
+                        else:
+                            return {'success': False, 'message': f'Hata: {error_msg}'}
+                else:
+                    return {'success': False, 'message': 'Geçersiz işlem!'}
+            except Exception as e:
+                error_msg = str(e)
+                try:
+                    await client.disconnect()
+                except:
+                    pass
+                return {'success': False, 'message': f'Hata: {error_msg}'}
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(handle_login())
+        finally:
+            loop.close()
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Giriş hatası: {str(e)}'})
+
+@app.route('/api/admin/<int:tenant_id>/telegram/groups/search', methods=['POST'])
+@login_required
+@require_tenant_access('tenant_id')
+def search_telegram_groups(tenant_id):
+    """Telegram'da grup ara"""
+    try:
+        data = request.json
+        search_term = data.get('search_term', '').strip()
+        
+        if not search_term:
+            return jsonify({'success': False, 'message': 'Arama terimi gerekli!', 'groups': []})
+        
+        client = get_telegram_client_for_tenant(tenant_id)
+        if not client:
+            return jsonify({'success': False, 'message': 'API bilgileri eksik!', 'groups': []})
+        
+        async def search_async():
+            try:
+                await client.connect()
+                if not await client.is_user_authorized():
+                    raise Exception('Telegram girişi yapılmamış!')
+                
+                groups = []
+                search_lower = search_term.lower()
+                
+                async for dialog in client.iter_dialogs():
+                    if dialog.is_group or dialog.is_channel:
+                        dialog_name = (dialog.name or '').lower()
+                        if search_lower in dialog_name:
+                            groups.append({
+                                'id': dialog.id,
+                                'name': dialog.name or 'İsimsiz Grup',
+                                'unread': dialog.unread_count,
+                                'is_channel': dialog.is_channel
+                            })
+                            if len(groups) >= 50:
+                                break
+                return groups
+            finally:
+                try:
+                    await client.disconnect()
+                except:
+                    pass
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            groups = loop.run_until_complete(search_async())
+            return jsonify({'success': True, 'groups': groups})
+        finally:
+            loop.close()
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e), 'groups': []})
+
+@app.route('/api/admin/<int:tenant_id>/telegram/groups/add-by-username', methods=['POST'])
+@login_required
+@require_tenant_access('tenant_id')
+def add_group_by_username(tenant_id):
+    """Username'den grup ekle"""
+    try:
+        data = request.json
+        username = data.get('username', '').strip()
+        
+        if not username:
+            return jsonify({'success': False, 'message': 'Username gerekli!', 'group': None})
+        
+        if username.startswith('@'):
+            username = username[1:]
+        
+        client = get_telegram_client_for_tenant(tenant_id)
+        if not client:
+            return jsonify({'success': False, 'message': 'API bilgileri eksik!', 'group': None})
+        
+        async def get_group_async():
+            try:
+                await client.connect()
+                if not await client.is_user_authorized():
+                    raise Exception('Telegram girişi yapılmamış!')
+                
+                entity = await client.get_entity(username)
+                return {
+                    'id': entity.id,
+                    'name': getattr(entity, 'title', username) or username,
+                    'is_channel': getattr(entity, 'broadcast', False),
+                    'username': getattr(entity, 'username', username)
+                }
+            finally:
+                try:
+                    await client.disconnect()
+                except:
+                    pass
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            group = loop.run_until_complete(get_group_async())
+            return jsonify({'success': True, 'group': group})
+        finally:
+            loop.close()
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e), 'group': None})
+
+@app.route('/api/admin/<int:tenant_id>/results/export', methods=['GET'])
+@login_required
+@require_tenant_access('tenant_id')
+def export_results(tenant_id):
+    """Sonuçları Excel formatında indir"""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from io import BytesIO
+        
+        db = SessionLocal()
+        try:
+            start_date = request.args.get('start_date')
+            end_date = request.args.get('end_date')
+            
+            query = db.query(Result).filter_by(tenant_id=tenant_id)
+            
+            if start_date:
+                query = query.filter(Result.timestamp >= datetime.strptime(start_date, '%Y-%m-%d'))
+            if end_date:
+                query = query.filter(Result.timestamp <= datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1))
+            
+            results = query.order_by(Result.timestamp.desc()).all()
+            
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Telegram Sonuçları"
+            
+            headers = ['Tarih', 'Grup', 'Grup ID', 'Bulunan Kelimeler', 'Bulunan Linkler', 
+                      'Görüntülenme', 'Paylaşım', 'Reaksiyonlar', 'Yanıtlar', 'Mesaj İçeriği', 'Mesaj Linki']
+            header_fill = PatternFill(start_color="667eea", end_color="667eea", fill_type="solid")
+            header_font = Font(bold=True, color="FFFFFF")
+            
+            for col_num, header in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col_num, value=header)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+            
+            for row_num, result in enumerate(results, 2):
+                ws.cell(row=row_num, column=1, value=result.timestamp.strftime('%Y-%m-%d %H:%M:%S'))
+                ws.cell(row=row_num, column=2, value=result.group_name)
+                ws.cell(row=row_num, column=3, value=result.group_id)
+                ws.cell(row=row_num, column=4, value=', '.join(result.found_keywords or []))
+                ws.cell(row=row_num, column=5, value=', '.join(result.found_links or []))
+                ws.cell(row=row_num, column=6, value=result.views_count)
+                ws.cell(row=row_num, column=7, value=result.forwards_count)
+                ws.cell(row=row_num, column=8, value=str(result.reactions_detail or {}))
+                ws.cell(row=row_num, column=9, value=result.replies_count)
+                ws.cell(row=row_num, column=10, value=result.message_text)
+                ws.cell(row=row_num, column=11, value=result.message_link)
+            
+            ws.column_dimensions['A'].width = 20
+            ws.column_dimensions['B'].width = 30
+            ws.column_dimensions['C'].width = 15
+            ws.column_dimensions['D'].width = 30
+            ws.column_dimensions['E'].width = 30
+            ws.column_dimensions['F'].width = 15
+            ws.column_dimensions['G'].width = 15
+            ws.column_dimensions['H'].width = 30
+            ws.column_dimensions['I'].width = 15
+            ws.column_dimensions['J'].width = 50
+            ws.column_dimensions['K'].width = 40
+            
+            output = BytesIO()
+            wb.save(output)
+            output.seek(0)
+            
+            from flask import Response
+            filename = f"telegram_sonuclari_{start_date or 'tum'}_{end_date or 'tum'}.xlsx"
+            return Response(
+                output.getvalue(),
+                mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": f"attachment; filename={filename}"}
+            )
+        finally:
+            db.close()
+    except ImportError:
+        return jsonify({'success': False, 'message': 'openpyxl gerekli!'}), 500
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}'}), 500
+
+if __name__ == '__main__':
+    # Database'i başlat
+    print("🔧 Database başlatılıyor...")
+    init_db()
+    create_super_admin()
+    
+    port = int(os.environ.get('PORT', 5000))
+    print("🌐 Web paneli başlatılıyor...")
+    print(f"📱 Tarayıcıda http://localhost:{port} adresine gidin")
+    app.run(debug=False, host='0.0.0.0', port=port)
+

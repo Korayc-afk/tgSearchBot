@@ -1,23 +1,38 @@
-# 📱 Telegram Monitoring Bot
+# 📱 Telegram Monitoring Bot (Multi-Tenant)
 
-Telegram gruplarında belirli kelimeleri, linkleri ve bahsedilmeleri izleyen ve web paneli üzerinden yönetilebilen bir bot.
+Telegram gruplarında belirli kelimeleri, linkleri ve bahsedilmeleri izleyen ve web paneli üzerinden yönetilebilen bir bot. **Çoklu grup desteği ile her grup izole çalışır, süper admin tüm grupları yönetebilir.**
 
 ## ✨ Özellikler
 
+### 🆕 Multi-Tenant Desteği
+- 🏢 **Çoklu Grup**: Her grup izole çalışır, birbirini görmez
+- 👑 **Süper Admin**: Tüm grupları görme ve yönetme yetkisi
+- 👤 **Normal Admin**: Sadece kendi grubunu görür ve yönetir
+- 🔐 **Güvenli**: Her grup için ayrı Telegram hesabı ve session
+
+### 📊 İstatistikler ve Raporlama
+- 📈 **Grafikler**: Chart.js ile günlük trend grafikleri
+- 📊 **Kelime İstatistikleri**: Hangi kelimeler ne kadar bulundu
+- 👁️ **Görüntülenme Sayısı**: Mesajların görüntülenme istatistikleri
+- 🔄 **Paylaşım Sayısı**: Mesajların paylaşım istatistikleri
+- ❤️ **Emoji Reaksiyonları**: Detaylı emoji bazında reaksiyon istatistikleri
+- 💬 **Yanıt Sayısı**: Mesaj yanıt istatistikleri
+
+### 🔍 Temel Özellikler
 - 🔍 **Kelime Arama**: Belirli kelimeleri Telegram gruplarında ara
 - 🔗 **Link Takibi**: Belirli linklerin kullanımını takip et
 - 📅 **Tarih Aralığı**: Geçmiş mesajları belirli tarih aralıklarında tara
 - 🎯 **Grup Seçimi**: Sadece seçtiğiniz grupları izle
-- 📊 **Web Paneli**: Kullanıcı dostu web arayüzü
+- 📊 **Web Paneli**: Modern ve kullanıcı dostu web arayüzü
 - 📥 **Excel Export**: Sonuçları Excel dosyası olarak indir
-- 🔍 **Grup Filtresi**: Sonuçları grup bazında filtrele
 - 🐛 **Debug Paneli**: Gerçek zamanlı tarama durumu ve loglar
 
 ## 🚀 Hızlı Başlangıç
 
 ### Gereksinimler
 - Python 3.7+
-- Telegram hesabı
+- PostgreSQL (production) veya SQLite (development)
+- Telegram hesabı (her grup için ayrı)
 - Telegram API ID ve API Hash
 
 ### Kurulum
@@ -27,18 +42,30 @@ Telegram gruplarında belirli kelimeleri, linkleri ve bahsedilmeleri izleyen ve 
 pip install -r requirements.txt
 ```
 
-2. **Botu başlatın:**
+2. **Database'i başlatın:**
 ```bash
-python web_panel.py
+python database.py
+```
+Bu komut database tablolarını oluşturur ve ilk süper admin kullanıcısını oluşturur:
+- Kullanıcı adı: `superadmin`
+- Şifre: `admin123`
+
+3. **Web panelini başlatın:**
+```bash
+python web_panel_new.py
 ```
 
-3. **Web paneline erişin:**
+4. **Web paneline erişin:**
 ```
 http://localhost:5000
 ```
 
-4. **İlk kullanım:**
-   - Ayarlar sekmesinde API bilgilerinizi girin
+5. **İlk kullanım:**
+   - Süper admin ile giriş yapın (`superadmin` / `admin123`)
+   - Yeni grup oluşturun
+   - Kullanıcı ekleyin ve gruba atayın
+   - Normal admin olarak giriş yapın
+   - Telegram API bilgilerinizi girin
    - Telegram'a giriş yapın
    - Grupları ekleyin ve tarama yapın
 

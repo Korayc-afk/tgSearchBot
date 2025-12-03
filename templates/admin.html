@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ tenant_name }} - Telegram Monitoring</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+        }
+
+        .navbar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .navbar h1 {
+            font-size: 1.5rem;
+        }
+
+        .navbar-actions {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: white;
+            color: #667eea;
+        }
+
+        .btn-primary:hover {
+            background: #f0f0f0;
+            transform: translateY(-2px);
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            border-left: 4px solid #667eea;
+        }
+
+        .stat-card h3 {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+        }
+
+        .stat-card .value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            border-bottom: 2px solid #e0e0e0;
+            flex-wrap: wrap;
+        }
+
+        .tab {
+            padding: 1rem 2rem;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 1rem;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            font-weight: 600;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .card {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            margin-bottom: 2rem;
+        }
+
+        .card h2 {
+            margin-bottom: 1.5rem;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .list-input {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .list-input input {
+            flex: 1;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-bottom: 2rem;
+        }
+
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .results-table th,
+        .results-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .results-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #666;
+        }
+
+        .results-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            display: inline-block;
+        }
+
+        .badge-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .badge-danger {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #666;
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 1rem 1.5rem;
+            background: #28a745;
+            color: white;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 2000;
+            display: none;
+        }
+
+        .toast.error {
+            background: #dc3545;
+        }
+
+        .toast.show {
+            display: block;
+            animation: slideIn 0.3s;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .group-list {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 1rem;
+        }
+
+        .group-item {
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            background: #f8f9fa;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <h1>📱 {{ tenant_name }} - Monitoring Panel</h1>
+        <div class="navbar-actions">
+            <span>{{ current_user.username }}</span>
+            <a href="/logout" class="btn btn-primary">Çıkış</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- İstatistikler -->
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <h3>Toplam Sonuç</h3>
+                <div class="value" id="totalResults">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Toplam Görüntülenme</h3>
+                <div class="value" id="totalViews">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Toplam Paylaşım</h3>
+                <div class="value" id="totalForwards">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Toplam Reaksiyon</h3>
+                <div class="value" id="totalReactions">-</div>
+            </div>
+        </div>
+
+        <!-- Grafikler -->
+        <div class="card">
+            <h2>📊 Günlük Sonuç Trendi</h2>
+            <div class="chart-container">
+                <canvas id="dailyChart"></canvas>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>📈 Kelime İstatistikleri</h2>
+            <div class="chart-container">
+                <canvas id="keywordChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('settings')">⚙️ Ayarlar</button>
+            <button class="tab" onclick="switchTab('groups')">👥 Gruplar</button>
+            <button class="tab" onclick="switchTab('results')">📊 Sonuçlar</button>
+            <button class="tab" onclick="switchTab('scan')">🔍 Tarama</button>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="settingsTab" class="tab-content active">
+            <div class="card">
+                <h2>Telegram API Ayarları</h2>
+                <form onsubmit="saveConfig(event)">
+                    <div class="form-group">
+                        <label>API ID</label>
+                        <input type="text" id="apiId" required>
+                    </div>
+                    <div class="form-group">
+                        <label>API Hash</label>
+                        <input type="text" id="apiHash" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Telefon Numarası</label>
+                        <input type="text" id="phoneNumber" placeholder="+90XXXXXXXXXX">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Kaydet</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2>Arama Ayarları</h2>
+                <form onsubmit="saveSearchConfig(event)">
+                    <div class="form-group">
+                        <label>Aranacak Kelimeler (Her satıra bir kelime)</label>
+                        <textarea id="searchKeywords" rows="5" placeholder="kelime1&#10;kelime2&#10;kelime3"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Aranacak Linkler (Her satıra bir link)</label>
+                        <textarea id="searchLinks" rows="5" placeholder="t.me/username&#10;example.com"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Tarama Zaman Aralığı</label>
+                        <select id="scanTimeRange">
+                            <option value="1day">Son 1 Gün</option>
+                            <option value="7days">Son 7 Gün</option>
+                            <option value="30days">Son 30 Gün</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Kaydet</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Groups Tab -->
+        <div id="groupsTab" class="tab-content">
+            <div class="card">
+                <h2>Telegram Grupları</h2>
+                <div style="margin-bottom: 1rem;">
+                    <button class="btn btn-primary" onclick="loadTelegramGroups()">Grupları Yükle</button>
+                    <button class="btn btn-success" onclick="openTelegramLogin()">Telegram'a Giriş Yap</button>
+                </div>
+                <div class="loading" id="groupsLoading" style="display: none;">Yükleniyor...</div>
+                <div class="group-list" id="groupsList" style="display: none;"></div>
+            </div>
+        </div>
+
+        <!-- Results Tab -->
+        <div id="resultsTab" class="tab-content">
+            <div class="card">
+                <h2>Sonuçlar</h2>
+                <div style="margin-bottom: 1rem; display: flex; gap: 1rem; flex-wrap: wrap;">
+                    <input type="date" id="startDate" class="form-group" style="width: auto;">
+                    <input type="date" id="endDate" class="form-group" style="width: auto;">
+                    <button class="btn btn-primary" onclick="loadResults()">Filtrele</button>
+                    <button class="btn btn-success" onclick="exportResults()">Excel İndir</button>
+                </div>
+                <div class="loading" id="resultsLoading" style="display: none;">Yükleniyor...</div>
+                <table class="results-table" id="resultsTable" style="display: none;">
+                    <thead>
+                        <tr>
+                            <th>Tarih</th>
+                            <th>Grup</th>
+                            <th>Kelimeler</th>
+                            <th>👁️</th>
+                            <th>🔄</th>
+                            <th>❤️</th>
+                            <th>Mesaj</th>
+                            <th>Link</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Scan Tab -->
+        <div id="scanTab" class="tab-content">
+            <div class="card">
+                <h2>Tarama Kontrolü</h2>
+                <div style="margin-bottom: 1rem;">
+                    <button class="btn btn-primary" onclick="startScan()">Tarama Başlat</button>
+                    <button class="btn btn-danger" onclick="stopScan()">Tarama Durdur</button>
+                </div>
+                <div id="scanStatus" style="padding: 1rem; background: #f8f9fa; border-radius: 6px; margin-bottom: 1rem;">
+                    <strong>Durum:</strong> <span id="scanStatusText">Bilinmiyor</span>
+                </div>
+                <div style="max-height: 400px; overflow-y: auto; background: #1e1e1e; color: #fff; padding: 1rem; border-radius: 6px; font-family: monospace; font-size: 12px;">
+                    <div id="scanLogs"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Telegram Login Modal -->
+    <div id="telegramLoginModal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+        <div class="card" style="max-width: 400px; width: 90%;">
+            <h2>Telegram Girişi</h2>
+            <div id="telegramLoginContent"></div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast"></div>
+
+    <script>
+        const tenantId = {{ tenant_id }};
+        let dailyChart = null;
+        let keywordChart = null;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            loadConfig();
+            loadStatistics();
+            loadResults();
+            checkScanStatus();
+            setInterval(checkScanStatus, 5000);
+        });
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tabName + 'Tab').classList.add('active');
+        }
+
+        async function loadConfig() {
+            try {
+                const res = await fetch(`/api/admin/${tenantId}/config`);
+                const data = await res.json();
+                
+                if (data.success) {
+                    document.getElementById('apiId').value = data.config.api_id || '';
+                    document.getElementById('apiHash').value = data.config.api_hash || '';
+                    document.getElementById('phoneNumber').value = data.config.phone_number || '';
+                    document.getElementById('searchKeywords').value = (data.config.search_keywords || []).join('\n');
+                    document.getElementById('searchLinks').value = (data.config.search_links || []).join('\n');
+                    document.getElementById('scanTimeRange').value = data.config.scan_time_range || '7days';
+                }
+            } catch (error) {
+                showToast('Ayarlar yüklenirken hata oluştu', 'error');
+            }
+        }
+
+        async function saveConfig(event) {
+            event.preventDefault();
+            const apiId = document.getElementById('apiId').value;
+            const apiHash = document.getElementById('apiHash').value;
+            const phoneNumber = document.getElementById('phoneNumber').value;
+            
+            try {
+                const res = await fetch(`/api/admin/${tenantId}/config`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({api_id: apiId, api_hash: apiHash, phone_number: phoneNumber})
+                });
+                
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Ayarlar kaydedildi!');
+                } else {
+                    showToast(data.message, 'error');
+                }
+            } catch (error) {
+                showToast('Ayarlar kaydedilirken hata oluştu', 'error');
+            }
+        }
+
+        async function saveSearchConfig(event) {
+            event.preventDefault();
+            const keywords = document.getElementById('searchKeywords').value.split('\n').filter(k => k.trim());
+            const links = document.getElementById('searchLinks').value.split('\n').filter(l => l.trim());
+            const scanTimeRange = document.getElementById('scanTimeRange').value;
+            
+            try {
+                const res = await fetch(`/api/admin/${tenantId}/config`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({search_keywords: keywords, search_links: links, scan_time_range: scanTimeRange})
+                });
+                
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Arama ayarları kaydedildi!');
+                } else {
+                    showToast(data.message, 'error');
+                }
+            } catch (error) {
+                showToast('Arama ayarları kaydedilirken hata oluştu', 'error');
+            }
+        }
+
+        async function loadStatistics() {
+            try {
+                const res = await fetch(`/api/admin/${tenantId}/statistics?days=30`);
+                const data = await res.json();
+                
+                if (data.success) {
+                    document.getElementById('totalResults').textContent = data.totals.total_results;
+                    document.getElementById('totalViews').textContent = data.totals.total_views.toLocaleString();
+                    document.getElementById('totalForwards').textContent = data.totals.total_forwards.toLocaleString();
+                    
+                    // Günlük grafik
+                    createDailyChart(data.daily_stats);
+                    
+                    // Kelime grafiği
+                    createKeywordChart(data.keyword_stats);
+                }
+            } catch (error) {
+                console.error('İstatistikler yüklenirken hata:', error);
+            }
+        }
+
+        function createDailyChart(dailyStats) {
+            const ctx = document.getElementById('dailyChart').getContext('2d');
+            
+            if (dailyChart) {
+                dailyChart.destroy();
+            }
+            
+            dailyChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dailyStats.map(s => new Date(s.date).toLocaleDateString('tr-TR')),
+                    datasets: [{
+                        label: 'Eşleşme Sayısı',
+                        data: dailyStats.map(s => s.total_matches),
+                        borderColor: 'rgb(102, 126, 234)',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+        }
+
+        function createKeywordChart(keywordStats) {
+            const ctx = document.getElementById('keywordChart').getContext('2d');
+            
+            if (keywordChart) {
+                keywordChart.destroy();
+            }
+            
+            const entries = Object.entries(keywordStats).sort((a, b) => b[1] - a[1]).slice(0, 10);
+            
+            keywordChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: entries.map(e => e[0]),
+                    datasets: [{
+                        label: 'Bulunma Sayısı',
+                        data: entries.map(e => e[1]),
+                        backgroundColor: 'rgba(102, 126, 234, 0.8)',
+                        borderColor: 'rgba(102, 126, 234, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        async function loadTelegramGroups() {
+            document.getElementById('groupsLoading').style.display = 'block';
+            try {
+                const res = await fetch(`/api/admin/${tenantId}/telegram/groups`);
+                const data = await res.json();
+                
+                if (data.success) {
+                    const list = document.getElementById('groupsList');
+                    list.innerHTML = '';
+                    
+                    data.groups.forEach(group => {
+                        const div = document.createElement('div');
+                        div.className = 'group-item';
+                        div.innerHTML = `
+                            <span><strong>${group.name}</strong> (ID: ${group.id})</span>
+                            <button class="btn btn-primary" onclick="addGroup(${group.id}, '${group.name}')">Ekle</button>
+                        `;
+                        list.appendChild(div);
+                    });
+                    
+                    document.getElementById('groupsLoading').style.display = 'none';
+                    list.style.display = 'block';
+                } else {
+                    showToast(data.message, 'error');
+                }
+            } catch (error) {
+                showToast('Gruplar yüklenirken hata oluştu', 'error');
+            }
+        }
+
+        async function addGroup(groupId, groupName) {
+            // Mevcut grupları al
+            const res = await fetch(`/api/admin/${tenantId}/config`);
+            const data = await res.json();
+            
+            const groups = data.config.group_ids || [];
+            if (groups.find(g => g.id === groupId)) {
+                showToast('Bu grup zaten ekli!', 'error');
+                return;
+            }
+            
+            groups.push({id: groupId, name: groupName});
+            
+            const saveRes = await fetch(`/api/admin/${tenantId}/config`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({group_ids: groups})
+            });
+            
+            const saveData = await saveRes.json();
+            if (saveData.success) {
+                showToast('Grup eklendi!');
+            }
+        }
+
+        async function loadResults() {
+            document.getElementById('resultsLoading').style.display = 'block';
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            
+            let url = `/api/admin/${tenantId}/results?limit=100`;
+            if (startDate) url += `&start_date=${startDate}`;
+            if (endDate) url += `&end_date=${endDate}`;
+            
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                
+                if (data.success) {
+                    const tbody = document.getElementById('resultsTableBody');
+                    tbody.innerHTML = '';
+                    
+                    data.results.forEach(result => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>${new Date(result.timestamp).toLocaleString('tr-TR')}</td>
+                            <td>${result.group_name}</td>
+                            <td>${(result.found_keywords || []).join(', ')}</td>
+                            <td>${result.views_count || 0}</td>
+                            <td>${result.forwards_count || 0}</td>
+                            <td>${result.reactions_count || 0}</td>
+                            <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${result.message_text || ''}</td>
+                            <td><a href="${result.message_link}" target="_blank">Link</a></td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                    
+                    document.getElementById('resultsLoading').style.display = 'none';
+                    document.getElementById('resultsTable').style.display = 'table';
+                }
+            } catch (error) {
+                showToast('Sonuçlar yüklenirken hata oluştu', 'error');
+            }
+        }
+
+        async function exportResults() {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            
+            let url = `/api/admin/${tenantId}/results/export`;
+            if (startDate) url += `?start_date=${startDate}`;
+            if (endDate) url += `${startDate ? '&' : '?'}end_date=${endDate}`;
+            
+            window.open(url, '_blank');
+        }
+
+        async function startScan() {
+            try {
+                const res = await fetch(`/api/admin/${tenantId}/scan`, {method: 'POST'});
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Tarama başlatıldı!');
+                    checkScanStatus();
+                } else {
+                    showToast(data.message, 'error');
+                }
+            } catch (error) {
+                showToast('Tarama başlatılırken hata oluştu', 'error');
+            }
+        }
+
+        async function checkScanStatus() {
+            try {
+                const res = await fetch(`/api/admin/${tenantId}/scan/status`);
+                const data = await res.json();
+                
+                if (data.success) {
+                    document.getElementById('scanStatusText').textContent = data.running ? 'Çalışıyor' : 'Durduruldu';
+                    document.getElementById('scanStatusText').style.color = data.running ? '#28a745' : '#dc3545';
+                    
+                    const logsDiv = document.getElementById('scanLogs');
+                    logsDiv.innerHTML = data.logs.map(log => `<div>${log}</div>`).join('');
+                    logsDiv.scrollTop = logsDiv.scrollHeight;
+                }
+            } catch (error) {
+                console.error('Tarama durumu kontrol edilirken hata:', error);
+            }
+        }
+
+        function openTelegramLogin() {
+            document.getElementById('telegramLoginModal').style.display = 'flex';
+            document.getElementById('telegramLoginContent').innerHTML = `
+                <div class="form-group">
+                    <label>Telefon Numarası</label>
+                    <input type="text" id="loginPhone" placeholder="+90XXXXXXXXXX">
+                </div>
+                <button class="btn btn-primary" onclick="sendTelegramCode()">Kod Gönder</button>
+            `;
+        }
+
+        async function sendTelegramCode() {
+            const phone = document.getElementById('loginPhone').value;
+            // Telegram login implementasyonu buraya gelecek
+            showToast('Telegram login özelliği yakında eklenecek', 'error');
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type} show`;
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
+
