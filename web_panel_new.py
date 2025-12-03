@@ -1217,8 +1217,30 @@ def telegram_login(tenant_id):
                 
                 if action == 'send_code':
                     try:
-                        sent_code = await client.send_code_request(phone)
+                        logger.info(f"   📤 SMS kodu gönderiliyor: {phone}")
+                        if client is None:
+                            logger.error("   ❌ Client None!")
+                            return {'success': False, 'message': 'Client None!'}
+                        
+                        send_code_result = client.send_code_request(phone)
+                        if send_code_result is None:
+                            logger.error("   ❌ send_code_request None döndürdü!")
+                            return {'success': False, 'message': 'Kod gönderme hatası: send_code_request None!'}
+                        
+                        sent_code = await send_code_result
+                        if sent_code is None:
+                            logger.error("   ❌ sent_code None!")
+                            return {'success': False, 'message': 'Kod gönderme hatası: sent_code None!'}
+                        
+                        if not hasattr(sent_code, 'phone_code_hash'):
+                            logger.error("   ❌ sent_code.phone_code_hash attribute yok!")
+                            return {'success': False, 'message': 'phone_code_hash alınamadı!'}
+                        
                         phone_code_hash = sent_code.phone_code_hash
+                        if not phone_code_hash:
+                            logger.error("   ❌ phone_code_hash boş!")
+                            return {'success': False, 'message': 'phone_code_hash boş!'}
+                        
                         # Session'ı async olarak kaydet (phone_code_hash otomatik kaydedilir)
                         await client.session.save()
                         logger.info(f"   ✅ Kod gönderildi, phone_code_hash: {phone_code_hash[:10]}...")
@@ -1226,6 +1248,9 @@ def telegram_login(tenant_id):
                         return {'success': True, 'message': 'Kod gönderildi!', 'phone_code_hash': phone_code_hash}
                     except Exception as e:
                         error_msg = str(e)
+                        logger.error(f"   ❌ send_code exception: {error_msg}")
+                        import traceback
+                        logger.error(f"   Traceback: {traceback.format_exc()}")
                         try:
                             await client.disconnect()
                         except:
@@ -1877,10 +1902,13 @@ def telegram_login_legacy():
                         return {'success': False, 'message': f'Client oluşturma hatası: {str(e)}'}
             
             if client is None:
+                logger.error("   ❌ Client None!")
                 return {'success': False, 'message': 'Client oluşturulamadı!'}
             
             try:
+                logger.info(f"   🔌 Client bağlanıyor...")
                 await client.connect()
+                logger.info(f"   ✅ Client bağlandı")
                 
                 if await client.is_user_authorized():
                     await client.disconnect()
@@ -1888,8 +1916,45 @@ def telegram_login_legacy():
                 
                 if action == 'send_code':
                     try:
-                        sent_code = await client.send_code_request(phone)
+                        logger.info(f"   📤 SMS kodu gönderiliyor: {phone}")
+                        logger.info(f"   🔍 Client tipi: {type(client)}")
+                        logger.info(f"   🔍 Client None mu: {client is None}")
+                        
+                        if client is None:
+                            logger.error("   ❌ Client None!")
+                            return {'success': False, 'message': 'Client None!'}
+                        
+                        if not hasattr(client, 'send_code_request'):
+                            logger.error("   ❌ client.send_code_request metodu yok!")
+                            return {'success': False, 'message': 'Client metod hatası!'}
+                        
+                        logger.info(f"   📞 send_code_request çağrılıyor...")
+                        send_code_result = client.send_code_request(phone)
+                        logger.info(f"   🔍 send_code_request sonucu tipi: {type(send_code_result)}")
+                        logger.info(f"   🔍 send_code_request None mu: {send_code_result is None}")
+                        
+                        if send_code_result is None:
+                            logger.error("   ❌ send_code_request None döndürdü!")
+                            return {'success': False, 'message': 'Kod gönderme hatası: send_code_request None!'}
+                        
+                        sent_code = await send_code_result
+                        logger.info(f"   🔍 sent_code tipi: {type(sent_code)}")
+                        logger.info(f"   🔍 sent_code None mu: {sent_code is None}")
+                        
+                        if sent_code is None:
+                            logger.error("   ❌ sent_code None!")
+                            return {'success': False, 'message': 'Kod gönderme hatası: sent_code None!'}
+                        
+                        if not hasattr(sent_code, 'phone_code_hash'):
+                            logger.error("   ❌ sent_code.phone_code_hash attribute yok!")
+                            logger.error(f"   🔍 sent_code attributes: {dir(sent_code)}")
+                            return {'success': False, 'message': 'phone_code_hash alınamadı!'}
+                        
                         phone_code_hash = sent_code.phone_code_hash
+                        if not phone_code_hash:
+                            logger.error("   ❌ phone_code_hash boş!")
+                            return {'success': False, 'message': 'phone_code_hash boş!'}
+                        
                         # Session'ı async olarak kaydet (phone_code_hash otomatik kaydedilir)
                         await client.session.save()
                         logger.info(f"   ✅ Kod gönderildi, phone_code_hash: {phone_code_hash[:10]}...")
@@ -1897,6 +1962,9 @@ def telegram_login_legacy():
                         return {'success': True, 'message': 'Kod gönderildi!', 'phone_code_hash': phone_code_hash}
                     except Exception as e:
                         error_msg = str(e)
+                        logger.error(f"   ❌ send_code exception: {error_msg}")
+                        import traceback
+                        logger.error(f"   Traceback: {traceback.format_exc()}")
                         try:
                             await client.disconnect()
                         except:
