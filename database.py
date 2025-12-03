@@ -263,11 +263,37 @@ def _create_session():
 # Kullanım: db = SessionLocal() - bu bir session döndürür
 SessionLocal = lambda: _create_session()
 
+def migrate_database():
+    """Mevcut tablolara eksik kolonları ekle (migration)"""
+    from sqlalchemy import text, inspect
+    engine = get_engine()
+    
+    try:
+        # users tablosunda password_plain kolonu var mı kontrol et
+        inspector = inspect(engine)
+        try:
+            columns = [col['name'] for col in inspector.get_columns('users')]
+        except Exception:
+            # Tablo yoksa migration yapmaya gerek yok
+            return
+        
+        if 'password_plain' not in columns:
+            with engine.begin() as conn:  # begin() transaction'ı otomatik commit eder
+                conn.execute(text("ALTER TABLE users ADD COLUMN password_plain VARCHAR(255)"))
+                print("✅ 'password_plain' kolonu 'users' tablosuna eklendi!")
+    except Exception as e:
+        # Kolon zaten varsa veya başka bir hata varsa devam et
+        if 'already exists' not in str(e).lower() and 'duplicate' not in str(e).lower():
+            print(f"⚠️  Migration hatası (devam ediliyor): {e}")
+
 def init_db():
-    """Database tablolarını oluştur"""
+    """Database tablolarını oluştur ve migration yap"""
     engine = get_engine()
     Base.metadata.create_all(engine)
     print("✅ Database tabloları oluşturuldu!")
+    
+    # Migration: Eksik kolonları ekle
+    migrate_database()
 
 def get_db():
     """Database session al"""
