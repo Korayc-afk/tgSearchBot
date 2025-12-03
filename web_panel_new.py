@@ -11,6 +11,8 @@ import json
 import os
 import subprocess
 import threading
+import logging
+import traceback
 from datetime import datetime, timedelta
 from telethon import TelegramClient
 from database import init_db, create_super_admin, SessionLocal, User, Tenant, TenantConfig, Result, MessageStatistics
@@ -21,9 +23,100 @@ from tenant_manager import (
     add_user_to_tenant, remove_user_from_tenant, get_tenant_users
 )
 
+# Logging yapılandırması
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('app.log', encoding='utf-8')
+    ]
+)
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__, static_folder='.')
 app.secret_key = os.environ.get('SECRET_KEY', 'padisah-telegram-monitoring-secret-key-change-in-production')
 CORS(app)
+
+# Request logging middleware
+@app.before_request
+def log_request_info():
+    """Her request'i logla"""
+    logger.info(f"🔵 REQUEST: {request.method} {request.path}")
+    logger.info(f"   Headers: {dict(request.headers)}")
+    if request.is_json:
+        try:
+            logger.info(f"   JSON Body: {json.dumps(request.json, indent=2, ensure_ascii=False)}")
+        except:
+            logger.info(f"   JSON Body: (parse edilemedi)")
+    elif request.form:
+        logger.info(f"   Form Data: {dict(request.form)}")
+    elif request.args:
+        logger.info(f"   Query Params: {dict(request.args)}")
+    if current_user.is_authenticated:
+        logger.info(f"   User: {current_user.username} (ID: {current_user.id}, Role: {current_user.role})")
+
+@app.after_request
+def log_response_info(response):
+    """Her response'u logla"""
+    logger.info(f"🟢 RESPONSE: {request.method} {request.path} - Status: {response.status_code}")
+    return response
+
+# Error handlers
+@app.errorhandler(400)
+def bad_request(error):
+    """400 Bad Request handler"""
+    logger.error(f"❌ BAD REQUEST: {request.method} {request.path}")
+    logger.error(f"   Error: {str(error)}")
+    logger.error(f"   Request Data: {request.get_data(as_text=True)}")
+    logger.error(f"   Traceback: {traceback.format_exc()}")
+    
+    return jsonify({
+        'success': False,
+        'message': f'Bad Request: {str(error)}',
+        'details': {
+            'method': request.method,
+            'path': request.path,
+            'error': str(error)
+        }
+    }), 400
+
+@app.errorhandler(404)
+def not_found(error):
+    """404 Not Found handler"""
+    logger.warning(f"⚠️  NOT FOUND: {request.method} {request.path}")
+    return jsonify({
+        'success': False,
+        'message': f'Endpoint bulunamadı: {request.path}'
+    }), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    """500 Internal Server Error handler"""
+    logger.error(f"❌ INTERNAL ERROR: {request.method} {request.path}")
+    logger.error(f"   Error: {str(error)}")
+    logger.error(f"   Traceback: {traceback.format_exc()}")
+    
+    return jsonify({
+        'success': False,
+        'message': f'Internal Server Error: {str(error)}',
+        'details': traceback.format_exc()
+    }), 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Genel exception handler"""
+    logger.error(f"❌ EXCEPTION: {request.method} {request.path}")
+    logger.error(f"   Exception Type: {type(e).__name__}")
+    logger.error(f"   Exception Message: {str(e)}")
+    logger.error(f"   Traceback: {traceback.format_exc()}")
+    
+    return jsonify({
+        'success': False,
+        'message': f'Hata: {str(e)}',
+        'error_type': type(e).__name__,
+        'details': traceback.format_exc()
+    }), 500
 
 # Flask-Login'i başlat
 login_manager.init_app(app)
@@ -1137,21 +1230,47 @@ def save_config_api_legacy():
 @login_required
 def get_groups_legacy():
     """Telegram gruplarını listele (eski format)"""
-    tenant_id = get_current_tenant_id()
-    if not tenant_id:
-        return jsonify({'success': False, 'message': 'Tenant bulunamadı!', 'groups': []})
-    
-    return get_telegram_groups(tenant_id)
+    try:
+        logger.info("📥 GET /api/groups çağrıldı")
+        tenant_id = get_current_tenant_id()
+        logger.info(f"   Tenant ID: {tenant_id}")
+        
+        if not tenant_id:
+            logger.warning("   ⚠️  Tenant bulunamadı!")
+            return jsonify({'success': False, 'message': 'Tenant bulunamadı!', 'groups': []})
+        
+        return get_telegram_groups(tenant_id)
+    except Exception as e:
+        logger.error(f"   ❌ Hata: {str(e)}")
+        logger.error(f"   Traceback: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}', 'groups': []}), 500
 
 @app.route('/api/groups/search', methods=['POST'])
 @login_required
 def search_groups_legacy():
     """Telegram'da grup ara (eski format)"""
-    tenant_id = get_current_tenant_id()
-    if not tenant_id:
-        return jsonify({'success': False, 'message': 'Tenant bulunamadı!', 'groups': []})
-    
-    return search_telegram_groups(tenant_id)
+    try:
+        logger.info("📥 POST /api/groups/search çağrıldı")
+        
+        if not request.is_json:
+            logger.error("   ❌ Request JSON değil!")
+            return jsonify({'success': False, 'message': 'Request JSON formatında olmalı!', 'groups': []}), 400
+        
+        data = request.json
+        logger.info(f"   Request Data: {json.dumps(data, indent=2, ensure_ascii=False)}")
+        
+        tenant_id = get_current_tenant_id()
+        logger.info(f"   Tenant ID: {tenant_id}")
+        
+        if not tenant_id:
+            logger.warning("   ⚠️  Tenant bulunamadı!")
+            return jsonify({'success': False, 'message': 'Tenant bulunamadı!', 'groups': []})
+        
+        return search_telegram_groups(tenant_id)
+    except Exception as e:
+        logger.error(f"   ❌ Hata: {str(e)}")
+        logger.error(f"   Traceback: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}', 'groups': []}), 500
 
 @app.route('/api/groups/add-by-username', methods=['POST'])
 @login_required
@@ -1167,11 +1286,22 @@ def add_group_by_username_legacy():
 @login_required
 def get_results_legacy():
     """Sonuçları al (eski format)"""
-    tenant_id = get_current_tenant_id()
-    if not tenant_id:
-        return jsonify({'success': False, 'message': 'Tenant bulunamadı!', 'results': []})
-    
-    return get_results_api(tenant_id)
+    try:
+        logger.info("📥 GET /api/results çağrıldı")
+        logger.info(f"   Query Params: {dict(request.args)}")
+        
+        tenant_id = get_current_tenant_id()
+        logger.info(f"   Tenant ID: {tenant_id}")
+        
+        if not tenant_id:
+            logger.warning("   ⚠️  Tenant bulunamadı!")
+            return jsonify({'success': False, 'message': 'Tenant bulunamadı!', 'results': []})
+        
+        return get_results_api(tenant_id)
+    except Exception as e:
+        logger.error(f"   ❌ Hata: {str(e)}")
+        logger.error(f"   Traceback: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}', 'results': []}), 500
 
 @app.route('/api/results/clear', methods=['POST'])
 @login_required
@@ -1199,21 +1329,51 @@ def clear_results_legacy():
 @login_required
 def telegram_login_legacy():
     """Telegram'a giriş yap (eski format)"""
-    tenant_id = get_current_tenant_id()
-    if not tenant_id:
-        return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
-    
-    return telegram_login(tenant_id)
+    try:
+        logger.info("📥 POST /api/telegram-login çağrıldı")
+        
+        if not request.is_json:
+            logger.error("   ❌ Request JSON değil!")
+            return jsonify({'success': False, 'message': 'Request JSON formatında olmalı!'}), 400
+        
+        data = request.json
+        logger.info(f"   Request Data: {json.dumps(data, indent=2, ensure_ascii=False)}")
+        
+        tenant_id = get_current_tenant_id()
+        logger.info(f"   Tenant ID: {tenant_id}")
+        
+        if not tenant_id:
+            logger.warning("   ⚠️  Tenant bulunamadı!")
+            return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
+        
+        return telegram_login(tenant_id)
+    except Exception as e:
+        logger.error(f"   ❌ Hata: {str(e)}")
+        logger.error(f"   Traceback: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}'}), 500
 
 @app.route('/api/scan', methods=['POST'])
 @login_required
 def start_scan_legacy():
     """Tarama başlat (eski format)"""
-    tenant_id = get_current_tenant_id()
-    if not tenant_id:
-        return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
-    
-    return start_scan_api(tenant_id)
+    try:
+        logger.info("📥 POST /api/scan çağrıldı")
+        
+        if request.is_json:
+            logger.info(f"   Request Data: {json.dumps(request.json, indent=2, ensure_ascii=False)}")
+        
+        tenant_id = get_current_tenant_id()
+        logger.info(f"   Tenant ID: {tenant_id}")
+        
+        if not tenant_id:
+            logger.warning("   ⚠️  Tenant bulunamadı!")
+            return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
+        
+        return start_scan_api(tenant_id)
+    except Exception as e:
+        logger.error(f"   ❌ Hata: {str(e)}")
+        logger.error(f"   Traceback: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}'}), 500
 
 @app.route('/api/scan-status', methods=['GET'])
 @login_required
