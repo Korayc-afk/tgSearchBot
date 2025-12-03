@@ -366,6 +366,33 @@ def update_user(user_id):
     except Exception as e:
         return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
 
+@app.route('/api/super-admin/users/<int:user_id>', methods=['DELETE'])
+@login_required
+@require_super_admin
+def delete_user(user_id):
+    """Kullanıcıyı sil"""
+    try:
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter_by(id=user_id).first()
+            if not user:
+                return jsonify({'success': False, 'message': 'Kullanıcı bulunamadı!'})
+            
+            # Süper admin kendini silemez
+            if user.role == 'super_admin' and user.id == current_user.id:
+                return jsonify({'success': False, 'message': 'Kendi hesabınızı silemezsiniz!'})
+            
+            db.delete(user)
+            db.commit()
+            return jsonify({'success': True, 'message': 'Kullanıcı silindi!'})
+        except Exception as e:
+            db.rollback()
+            return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
+        finally:
+            db.close()
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
+
 @app.route('/api/super-admin/tenants/<int:tenant_id>/results')
 @login_required
 @require_super_admin
