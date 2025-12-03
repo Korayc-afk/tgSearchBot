@@ -339,5 +339,36 @@ if __name__ == '__main__':
     print("🔧 Database başlatılıyor...")
     init_db()
     create_super_admin()
+    
+    # Hazır grupları oluştur
+    print("🔧 Hazır gruplar oluşturuluyor...")
+    from tenant_manager import create_tenant
+    from database import SessionLocal, User
+    
+    db = SessionLocal()
+    try:
+        # Süper admin kullanıcısını bul
+        super_admin = db.query(User).filter_by(role='super_admin').first()
+        if super_admin:
+            groups = ['Gala', 'Hit', 'Pipo', 'Office', 'Padisah']
+            created_count = 0
+            for group_name in groups:
+                # Grup zaten var mı kontrol et
+                existing = db.query(Tenant).filter_by(name=group_name).first()
+                if not existing:
+                    try:
+                        tenant = create_tenant(group_name, super_admin.id)
+                        print(f"✅ '{group_name}' grubu oluşturuldu (ID: {tenant.id})")
+                        created_count += 1
+                    except Exception as e:
+                        print(f"⚠️  '{group_name}' grubu oluşturulamadı: {e}")
+                else:
+                    print(f"ℹ️  '{group_name}' grubu zaten mevcut (ID: {existing.id})")
+            print(f"🎉 {created_count} yeni grup oluşturuldu!")
+        else:
+            print("⚠️  Süper admin bulunamadı, gruplar oluşturulamadı!")
+    finally:
+        db.close()
+    
     print("✅ Database hazır!")
 

@@ -412,15 +412,19 @@ def create_tenant_api():
         
         # Tenant oluştur (sadece tenant, user_tenant ilişkisi oluşturma)
         tenant = create_tenant(name, current_user.id)
-        logger.info(f"   ✅ Tenant oluşturuldu: {tenant.id} - {tenant.name}")
+        # Expunge edilmiş tenant'tan bilgileri al
+        tenant_id = tenant.id
+        tenant_name = tenant.name
+        tenant_slug = tenant.slug
+        logger.info(f"   ✅ Tenant oluşturuldu: {tenant_id} - {tenant_name}")
         
         return jsonify({
             'success': True,
             'message': 'Grup başarıyla oluşturuldu!',
             'tenant': {
-                'id': tenant.id,
-                'name': tenant.name,
-                'slug': tenant.slug
+                'id': tenant_id,
+                'name': tenant_name,
+                'slug': tenant_slug
             }
         })
     except Exception as e:
