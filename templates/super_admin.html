@@ -216,6 +216,28 @@
     </nav>
 
     <div class="container">
+        <!-- Grup Yönetimi -->
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h2>Grup Yönetimi</h2>
+                <button class="btn btn-primary" onclick="openCreateTenantModal()">+ Yeni Grup</button>
+            </div>
+            <div class="loading" id="tenantsLoading">Yükleniyor...</div>
+            <table class="table" id="tenantsTable" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Grup Adı</th>
+                        <th>Durum</th>
+                        <th>Oluşturulma</th>
+                        <th>İşlemler</th>
+                    </tr>
+                </thead>
+                <tbody id="tenantsTableBody"></tbody>
+            </table>
+        </div>
+
+        <!-- Kullanıcı Yönetimi -->
         <div class="card">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
                 <h2>Kullanıcı Yönetimi</h2>
@@ -287,6 +309,48 @@
                 </div>
                 <div style="display: flex; gap: 1rem; justify-content: flex-end;">
                     <button type="button" class="btn" onclick="closeModal('editUserModal')">İptal</button>
+                    <button type="submit" class="btn btn-primary">Güncelle</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create Tenant Modal -->
+    <div id="createTenantModal" class="modal">
+        <div class="modal-content">
+            <h2 style="margin-bottom: 1.5rem;">Yeni Grup Oluştur</h2>
+            <form onsubmit="createTenant(event)">
+                <div class="form-group">
+                    <label>Grup Adı</label>
+                    <input type="text" id="tenantName" required>
+                </div>
+                <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                    <button type="button" class="btn" onclick="closeModal('createTenantModal')">İptal</button>
+                    <button type="submit" class="btn btn-primary">Oluştur</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Tenant Modal -->
+    <div id="editTenantModal" class="modal">
+        <div class="modal-content">
+            <h2 style="margin-bottom: 1.5rem;">Grup Düzenle</h2>
+            <form onsubmit="updateTenant(event)">
+                <input type="hidden" id="editTenantId">
+                <div class="form-group">
+                    <label>Grup Adı</label>
+                    <input type="text" id="editTenantName" required>
+                </div>
+                <div class="form-group">
+                    <label>Durum</label>
+                    <select id="editTenantStatus" required>
+                        <option value="true">Aktif</option>
+                        <option value="false">Pasif</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                    <button type="button" class="btn" onclick="closeModal('editTenantModal')">İptal</button>
                     <button type="submit" class="btn btn-primary">Güncelle</button>
                 </div>
             </form>

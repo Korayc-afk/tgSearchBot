@@ -1579,7 +1579,7 @@ def test_telegram_legacy():
         client = get_telegram_client_for_tenant(tenant_id)
         if not client:
             logger.warning("   ⚠️  Telegram client oluşturulamadı (API bilgileri eksik)")
-            return jsonify({'success': False, 'message': 'API bilgileri eksik!'})
+            return jsonify({'success': False, 'message': 'API bilgileri eksik! Lütfen Ayarlar sekmesinden API ID ve API Hash bilgilerinizi girin.'})
         
         async def test():
             try:
