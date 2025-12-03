@@ -477,6 +477,12 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        @keyframes pulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7); }
+            50% { transform: scale(1.02); box-shadow: 0 0 0 10px rgba(40, 167, 69, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(40, 167, 69, 0); }
+        }
     </style>
 </head>
 <body>
@@ -2103,17 +2109,35 @@
                 
                 if (data.success) {
                     codeSent = true;
-                    // Kod giriş alanını göster
+                    // Kod giriş alanını kesinlikle göster
                     const codeSection = document.getElementById('code-section');
                     if (codeSection) {
                         codeSection.style.display = 'block';
+                        codeSection.style.visibility = 'visible';
+                        codeSection.style.opacity = '1';
+                        // Highlight efekti ekle
+                        codeSection.style.animation = 'pulse 0.5s ease-in-out';
+                        codeSection.style.border = '2px solid #28a745';
+                        codeSection.style.borderRadius = '8px';
+                        codeSection.style.padding = '15px';
+                        codeSection.style.backgroundColor = '#f0f9ff';
+                        console.log('✅ Kod giriş alanı gösterildi');
+                        
                         // Kod input'una focus ver
                         const codeInput = document.getElementById('login-code');
                         if (codeInput) {
-                            setTimeout(() => codeInput.focus(), 100);
+                            codeInput.style.display = 'block';
+                            codeInput.style.visibility = 'visible';
+                            codeInput.style.border = '2px solid #28a745';
+                            setTimeout(() => {
+                                codeInput.focus();
+                                console.log('✅ Kod input focus edildi');
+                            }, 100);
                         }
+                    } else {
+                        console.error('❌ code-section elementi bulunamadı!');
                     }
-                    statusDiv.innerHTML = '<div class="alert alert-success">✅ Kod gönderildi! Kodu girin ve "Giriş Yap" butonuna tıklayın.</div>';
+                    statusDiv.innerHTML = '<div class="alert alert-success" style="font-size: 16px; font-weight: bold;">✅ Kod gönderildi! <br><strong style="color: #28a745;">Aşağıdaki yeşil çerçeveli alana kodu girin</strong> ve "Giriş Yap" butonuna tıklayın.</div>';
                 } else {
                     statusDiv.innerHTML = `<div class="alert alert-error">❌ ${data.message}</div>`;
                     codeSent = false; // Hata durumunda tekrar denemeye izin ver
@@ -2183,7 +2207,20 @@
             
             // Kod doğrulama
             if (!code) {
-                statusDiv.innerHTML = '<div class="alert alert-error">Lütfen kodu girin!</div>';
+                // Eğer kod gönderilmişse ama kod giriş alanı görünmüyorsa, göster
+                if (codeSent) {
+                    const codeSection = document.getElementById('code-section');
+                    if (codeSection) {
+                        codeSection.style.display = 'block';
+                        codeSection.style.visibility = 'visible';
+                        codeSection.style.opacity = '1';
+                        const codeInput = document.getElementById('login-code');
+                        if (codeInput) {
+                            codeInput.focus();
+                        }
+                    }
+                }
+                statusDiv.innerHTML = '<div class="alert alert-error">⚠️ Lütfen telefonunuza gelen kodu girin!</div>';
                 return;
             }
             
