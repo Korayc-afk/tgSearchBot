@@ -196,18 +196,44 @@ def create_engine_instance():
             # Development için SQLite
             db_url = get_database_url_sqlite()
     
+    # postgres:// -> postgresql:// dönüştür (SQLAlchemy 2.0+ için)
+    if db_url and db_url.startswith('postgres://'):
+        db_url = db_url.replace('postgres://', 'postgresql://', 1)
+    
     return create_engine(db_url, echo=False)
 
-engine = create_engine_instance()
-SessionLocal = sessionmaker(bind=engine)
+# Lazy loading - engine'i ilk kullanımda oluştur
+_engine = None
+_SessionLocal = None
+
+def get_engine():
+    """Engine'i al veya oluştur (lazy loading)"""
+    global _engine
+    if _engine is None:
+        _engine = create_engine_instance()
+    return _engine
+
+def get_session_local():
+    """SessionLocal'ı al veya oluştur (lazy loading)"""
+    global _SessionLocal
+    if _SessionLocal is None:
+        _SessionLocal = sessionmaker(bind=get_engine())
+    return _SessionLocal
+
+# Backward compatibility - SessionLocal'ı callable olarak export et
+def SessionLocal():
+    """SessionLocal factory - lazy loading ile"""
+    return get_session_local()
 
 def init_db():
     """Database tablolarını oluştur"""
+    engine = get_engine()
     Base.metadata.create_all(engine)
     print("✅ Database tabloları oluşturuldu!")
 
 def get_db():
     """Database session al"""
+    SessionLocal = get_session_local()
     db = SessionLocal()
     try:
         yield db
@@ -218,6 +244,7 @@ def create_super_admin(username='superadmin', password='admin123'):
     """İlk süper admin kullanıcısını oluştur"""
     from hashlib import sha256
     
+    SessionLocal = get_session_local()
     db = SessionLocal()
     try:
         # Zaten var mı kontrol et
