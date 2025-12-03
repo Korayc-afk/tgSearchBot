@@ -2103,7 +2103,16 @@
                 
                 if (data.success) {
                     codeSent = true;
-                    document.getElementById('code-section').style.display = 'block';
+                    // Kod giriş alanını göster
+                    const codeSection = document.getElementById('code-section');
+                    if (codeSection) {
+                        codeSection.style.display = 'block';
+                        // Kod input'una focus ver
+                        const codeInput = document.getElementById('login-code');
+                        if (codeInput) {
+                            setTimeout(() => codeInput.focus(), 100);
+                        }
+                    }
                     statusDiv.innerHTML = '<div class="alert alert-success">✅ Kod gönderildi! Kodu girin ve "Giriş Yap" butonuna tıklayın.</div>';
                 } else {
                     statusDiv.innerHTML = `<div class="alert alert-error">❌ ${data.message}</div>`;
