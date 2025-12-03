@@ -1058,8 +1058,24 @@
             try {
                 showToast('Telegram girişi test ediliyor...', 'info', 3000);
                 
-                // Önce telefon numarasını kaydet
-                await savePhoneNumber();
+                // Önce telefon numarasını kaydet (ayrı fonksiyon çağrısı olmadan)
+                try {
+                    const saveResponse = await fetch('/api/config', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            PHONE_NUMBER: phoneNumber
+                        })
+                    });
+                    const saveData = await saveResponse.json();
+                    if (!saveData.success) {
+                        showToast(`⚠️ Telefon numarası kaydedilemedi: ${saveData.message}`, 'warning');
+                    }
+                } catch (e) {
+                    console.warn('Telefon numarası kaydedilemedi:', e);
+                }
                 
                 // Sonra Telegram login modalını aç
                 document.getElementById('login-phone').value = phoneNumber;
