@@ -320,6 +320,52 @@ def create_user():
     except Exception as e:
         return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
 
+@app.route('/api/super-admin/users/<int:user_id>', methods=['PUT'])
+@login_required
+@require_super_admin
+def update_user(user_id):
+    """Kullanıcıyı güncelle"""
+    try:
+        from hashlib import sha256
+        
+        data = request.json
+        username = data.get('username', '').strip()
+        password = data.get('password', '')
+        role = data.get('role')
+        
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter_by(id=user_id).first()
+            if not user:
+                return jsonify({'success': False, 'message': 'Kullanıcı bulunamadı!'})
+            
+            # Kullanıcı adı güncelle
+            if username and username != user.username:
+                # Yeni kullanıcı adı zaten kullanılıyor mu?
+                existing = db.query(User).filter_by(username=username).first()
+                if existing and existing.id != user_id:
+                    return jsonify({'success': False, 'message': 'Bu kullanıcı adı zaten kullanılıyor!'})
+                user.username = username
+            
+            # Şifre güncelle
+            if password:
+                password_hash = sha256(password.encode()).hexdigest()
+                user.password_hash = password_hash
+            
+            # Rol güncelle
+            if role:
+                user.role = role
+            
+            db.commit()
+            return jsonify({'success': True, 'message': 'Kullanıcı güncellendi!'})
+        except Exception as e:
+            db.rollback()
+            return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
+        finally:
+            db.close()
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
+
 @app.route('/api/super-admin/tenants/<int:tenant_id>/results')
 @login_required
 @require_super_admin

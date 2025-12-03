@@ -429,6 +429,35 @@
         </div>
     </div>
 
+    <!-- Edit User Modal -->
+    <div id="editUserModal" class="modal">
+        <div class="modal-content">
+            <h2 style="margin-bottom: 1.5rem;">Kullanıcı Düzenle</h2>
+            <form onsubmit="updateUser(event)">
+                <input type="hidden" id="editUserId">
+                <div class="form-group">
+                    <label>Kullanıcı Adı</label>
+                    <input type="text" id="editUserUsername" required>
+                </div>
+                <div class="form-group">
+                    <label>Yeni Şifre (Değiştirmek istemiyorsanız boş bırakın)</label>
+                    <input type="password" id="editUserPassword" placeholder="Şifre değiştirmek istemiyorsanız boş bırakın">
+                </div>
+                <div class="form-group">
+                    <label>Rol</label>
+                    <select id="editUserRole" required>
+                        <option value="admin">Admin</option>
+                        <option value="super_admin">Süper Admin</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                    <button type="button" class="btn" onclick="closeModal('editUserModal')">İptal</button>
+                    <button type="submit" class="btn btn-primary">Güncelle</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Toast -->
     <div id="toast" class="toast"></div>
 
@@ -550,6 +579,7 @@
                             <td><span class="badge ${user.role === 'super_admin' ? 'badge-danger' : 'badge-success'}">${user.role === 'super_admin' ? 'Süper Admin' : 'Admin'}</span></td>
                             <td>${user.last_login ? new Date(user.last_login).toLocaleString('tr-TR') : 'Hiç giriş yapmamış'}</td>
                             <td>
+                                <button class="btn btn-primary" onclick="openEditUserModal(${user.id}, '${user.username}', '${user.role}')" style="margin-right: 0.5rem;">Düzenle</button>
                                 <button class="btn btn-danger" onclick="deleteUser(${user.id})">Sil</button>
                             </td>
                         `;
@@ -634,6 +664,64 @@
                 }
             } catch (error) {
                 showToast('Grup silinirken hata oluştu', 'error');
+            }
+        }
+
+        async function deleteUser(id) {
+            if (!confirm('Bu kullanıcıyı silmek istediğinize emin misiniz?')) return;
+            
+            try {
+                const res = await fetch(`/api/super-admin/users/${id}`, {method: 'DELETE'});
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Kullanıcı silindi!');
+                    loadUsers();
+                    loadDashboard();
+                } else {
+                    showToast(data.message, 'error');
+                }
+            } catch (error) {
+                showToast('Kullanıcı silinirken hata oluştu', 'error');
+            }
+        }
+
+        function openEditUserModal(userId, username, role) {
+            document.getElementById('editUserId').value = userId;
+            document.getElementById('editUserUsername').value = username;
+            document.getElementById('editUserRole').value = role;
+            document.getElementById('editUserPassword').value = '';
+            document.getElementById('editUserModal').classList.add('active');
+        }
+
+        async function updateUser(event) {
+            event.preventDefault();
+            const userId = document.getElementById('editUserId').value;
+            const username = document.getElementById('editUserUsername').value;
+            const password = document.getElementById('editUserPassword').value;
+            const role = document.getElementById('editUserRole').value;
+            
+            const updateData = {username, role};
+            if (password) {
+                updateData.password = password;
+            }
+            
+            try {
+                const res = await fetch(`/api/super-admin/users/${userId}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(updateData)
+                });
+                
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Kullanıcı güncellendi!');
+                    closeModal('editUserModal');
+                    loadUsers();
+                } else {
+                    showToast(data.message, 'error');
+                }
+            } catch (error) {
+                showToast('Kullanıcı güncellenirken hata oluştu', 'error');
             }
         }
 

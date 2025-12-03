@@ -83,6 +83,8 @@ def create_tenant(name, created_by_user_id=None):
         with open(config.results_file_path, 'w', encoding='utf-8') as f:
             f.write('')
         
+        # Session dışında kullanım için expunge
+        db.expunge(tenant)
         return tenant
     except Exception as e:
         db.rollback()
@@ -94,7 +96,15 @@ def get_tenant(tenant_id):
     """Tenant'ı ID ile al"""
     db = SessionLocal()
     try:
-        return db.query(Tenant).filter_by(id=tenant_id).first()
+        tenant = db.query(Tenant).filter_by(id=tenant_id).first()
+        if tenant:
+            # Lazy loading için gerekli alanları yükle
+            _ = tenant.name
+            _ = tenant.slug
+            _ = tenant.is_active
+            # Session dışında kullanım için expunge
+            db.expunge(tenant)
+        return tenant
     finally:
         db.close()
 
@@ -102,7 +112,15 @@ def get_tenant_by_slug(slug):
     """Tenant'ı slug ile al"""
     db = SessionLocal()
     try:
-        return db.query(Tenant).filter_by(slug=slug).first()
+        tenant = db.query(Tenant).filter_by(slug=slug).first()
+        if tenant:
+            # Lazy loading için gerekli alanları yükle
+            _ = tenant.name
+            _ = tenant.slug
+            _ = tenant.is_active
+            # Session dışında kullanım için expunge
+            db.expunge(tenant)
+        return tenant
     finally:
         db.close()
 
