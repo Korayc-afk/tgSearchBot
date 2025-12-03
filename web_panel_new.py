@@ -952,8 +952,11 @@ if __name__ == '__main__':
         init_db()
         create_super_admin()
         print("✅ Database hazır!")
+        print("🔐 Süper Admin: padisah_admin / P@d1$@h2024!Secure#Admin")
     except Exception as e:
         print(f"⚠️  Database hatası (devam ediliyor): {e}")
+        import traceback
+        traceback.print_exc()
     
     # Port'u environment variable'dan al (Coolify PORT kullanır)
     port = int(os.environ.get('PORT', 5000))

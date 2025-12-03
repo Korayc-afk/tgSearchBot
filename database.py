@@ -200,6 +200,38 @@ def create_engine_instance():
     if db_url and db_url.startswith('postgres://'):
         db_url = db_url.replace('postgres://', 'postgresql://', 1)
     
+    # Database yoksa oluştur (PostgreSQL için)
+    if db_url and db_url.startswith('postgresql://'):
+        try:
+            # Database adını URL'den çıkar
+            from urllib.parse import urlparse
+            from sqlalchemy import text
+            parsed = urlparse(db_url)
+            db_name = parsed.path.lstrip('/')
+            
+            # Eğer database adı varsa ve 'postgres' değilse, database'i oluştur
+            if db_name and db_name != 'postgres':
+                # postgres database'ine bağlan
+                admin_url = db_url.rsplit('/', 1)[0] + '/postgres'
+                admin_engine = create_engine(admin_url, echo=False, isolation_level='AUTOCOMMIT')
+                
+                # Database var mı kontrol et
+                with admin_engine.connect() as conn:
+                    result = conn.execute(
+                        text(f"SELECT 1 FROM pg_database WHERE datname = :db_name"),
+                        {'db_name': db_name}
+                    )
+                    if not result.fetchone():
+                        # Database yok, oluştur
+                        conn.execute(text(f"CREATE DATABASE {db_name}"))
+                        print(f"✅ Database '{db_name}' oluşturuldu!")
+                    else:
+                        print(f"ℹ️  Database '{db_name}' zaten mevcut.")
+                
+                admin_engine.dispose()
+        except Exception as e:
+            print(f"⚠️  Database oluşturma hatası (devam ediliyor): {e}")
+    
     return create_engine(db_url, echo=False)
 
 # Lazy loading - engine'i ilk kullanımda oluştur
@@ -220,10 +252,15 @@ def get_session_local():
         _SessionLocal = sessionmaker(bind=get_engine())
     return _SessionLocal
 
-# Backward compatibility - SessionLocal'ı callable olarak export et
-def SessionLocal():
-    """SessionLocal factory - lazy loading ile"""
-    return get_session_local()
+# Backward compatibility - SessionLocal'ı sessionmaker olarak export et
+# Kullanım: db = SessionLocal() (sessionmaker çağrılır, session oluşturulur)
+def _create_session():
+    """Session oluştur"""
+    return get_session_local()()
+
+# SessionLocal'ı direkt sessionmaker olarak export et
+# Kullanım: db = SessionLocal() - bu bir session döndürür
+SessionLocal = lambda: _create_session()
 
 def init_db():
     """Database tablolarını oluştur"""
@@ -240,7 +277,7 @@ def get_db():
     finally:
         db.close()
 
-def create_super_admin(username='superadmin', password='admin123'):
+def create_super_admin(username='padisah_admin', password='P@d1$@h2024!Secure#Admin'):
     """İlk süper admin kullanıcısını oluştur"""
     from hashlib import sha256
     
