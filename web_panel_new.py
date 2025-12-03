@@ -42,19 +42,25 @@ CORS(app)
 @app.before_request
 def log_request_info():
     """Her request'i logla"""
-    logger.info(f"🔵 REQUEST: {request.method} {request.path}")
-    logger.info(f"   Headers: {dict(request.headers)}")
-    if request.is_json:
+    try:
+        logger.info(f"🔵 REQUEST: {request.method} {request.path}")
+        logger.info(f"   Headers: {dict(request.headers)}")
+        if request.is_json:
+            try:
+                logger.info(f"   JSON Body: {json.dumps(request.json, indent=2, ensure_ascii=False)}")
+            except:
+                logger.info(f"   JSON Body: (parse edilemedi)")
+        elif request.form:
+            logger.info(f"   Form Data: {dict(request.form)}")
+        elif request.args:
+            logger.info(f"   Query Params: {dict(request.args)}")
         try:
-            logger.info(f"   JSON Body: {json.dumps(request.json, indent=2, ensure_ascii=False)}")
+            if current_user.is_authenticated:
+                logger.info(f"   User: {current_user.username} (ID: {current_user.id}, Role: {current_user.role})")
         except:
-            logger.info(f"   JSON Body: (parse edilemedi)")
-    elif request.form:
-        logger.info(f"   Form Data: {dict(request.form)}")
-    elif request.args:
-        logger.info(f"   Query Params: {dict(request.args)}")
-    if current_user.is_authenticated:
-        logger.info(f"   User: {current_user.username} (ID: {current_user.id}, Role: {current_user.role})")
+            logger.info(f"   User: (yüklenemedi)")
+    except Exception as e:
+        logger.error(f"   Logging hatası: {e}")
 
 @app.after_request
 def log_response_info(response):
@@ -68,16 +74,34 @@ def bad_request(error):
     """400 Bad Request handler"""
     logger.error(f"❌ BAD REQUEST: {request.method} {request.path}")
     logger.error(f"   Error: {str(error)}")
+    logger.error(f"   Error Type: {type(error).__name__}")
     logger.error(f"   Request Data: {request.get_data(as_text=True)}")
+    logger.error(f"   Request Args: {dict(request.args)}")
+    logger.error(f"   Request Form: {dict(request.form)}")
+    try:
+        if request.is_json:
+            logger.error(f"   Request JSON: {json.dumps(request.json, indent=2, ensure_ascii=False)}")
+    except:
+        logger.error(f"   Request JSON: (parse edilemedi)")
     logger.error(f"   Traceback: {traceback.format_exc()}")
+    
+    # Daha açıklayıcı hata mesajı
+    error_msg = str(error)
+    if 'tenant_id' in error_msg.lower() or 'tenant' in request.path.lower():
+        error_msg = "Tenant ID bulunamadı veya geçersiz!"
+    elif 'json' in error_msg.lower():
+        error_msg = "JSON formatı geçersiz!"
+    elif 'form' in error_msg.lower():
+        error_msg = "Form verisi eksik veya geçersiz!"
     
     return jsonify({
         'success': False,
-        'message': f'Bad Request: {str(error)}',
+        'message': f'Bad Request: {error_msg}',
         'details': {
             'method': request.method,
             'path': request.path,
-            'error': str(error)
+            'error': str(error),
+            'error_type': type(error).__name__
         }
     }), 400
 
