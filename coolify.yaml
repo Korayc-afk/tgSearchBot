@@ -1,0 +1,36 @@
+# Coolify Configuration
+# Bu dosya Coolify'ın otomatik deployment ayarlarını içerir
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile  # Eğer Dockerfile kullanıyorsanız
+    environment:
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=${DB_HOST:-tgmonitor-db.internal}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-tgmonitor}
+      - SECRET_KEY=${SECRET_KEY}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - PORT=${PORT:-5000}
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./tenants:/app/tenants  # Persistent storage için
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME:-tgmonitor}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
+
