@@ -1240,24 +1240,35 @@ def telegram_login(tenant_id):
                         return {'success': False, 'message': 'Kod gerekli!'}
                     
                     try:
+                        logger.info(f"   🔐 Kod doğrulanıyor: {code[:2]}**")
                         result = await client.sign_in(phone, code)
+                        logger.info(f"   ✅ sign_in başarılı!")
+                        
                         # Session'ı kaydet (async olarak)
                         try:
+                            logger.info(f"   💾 Session kaydediliyor...")
                             await client.session.save()
                             logger.info(f"   ✅ Session kaydedildi")
                         except Exception as save_error:
                             logger.warning(f"   ⚠️  Session kaydetme hatası (devam ediliyor): {save_error}")
+                            import traceback
+                            logger.warning(f"   Traceback: {traceback.format_exc()}")
                         
                         await client.disconnect()
+                        logger.info(f"   🔌 Client disconnect edildi")
                         
                         # Session dosyasının varlığını kontrol et
                         session_file = session_name + '.session'
+                        logger.info(f"   📁 Session dosyası kontrol ediliyor: {session_file}")
                         if os.path.exists(session_file):
-                            logger.info(f"   ✅ Session dosyası mevcut: {session_file}")
+                            file_size = os.path.getsize(session_file)
+                            logger.info(f"   ✅ Session dosyası mevcut: {session_file} (Boyut: {file_size} bytes)")
                             return {'success': True, 'message': 'Giriş başarılı!', 'requires_password': False}
                         else:
                             # Session dosyası yoksa bile, giriş başarılı olabilir (Telethon otomatik kaydeder)
-                            logger.warning(f"   ⚠️  Session dosyası bulunamadı ama giriş başarılı olabilir")
+                            logger.warning(f"   ⚠️  Session dosyası bulunamadı: {session_file}")
+                            logger.warning(f"   ⚠️  Session dizini: {os.path.dirname(session_file)}")
+                            logger.warning(f"   ⚠️  Dizin mevcut mu: {os.path.exists(os.path.dirname(session_file))}")
                             return {'success': True, 'message': 'Giriş başarılı!', 'requires_password': False}
                     except Exception as e:
                         error_msg = str(e)
@@ -1894,24 +1905,35 @@ def telegram_login_legacy():
                         return {'success': False, 'message': 'Kod gerekli!'}
                     
                     try:
+                        logger.info(f"   🔐 Kod doğrulanıyor: {code[:2]}**")
                         result = await client.sign_in(phone, code)
+                        logger.info(f"   ✅ sign_in başarılı!")
+                        
                         # Session'ı kaydet (async olarak)
                         try:
+                            logger.info(f"   💾 Session kaydediliyor...")
                             await client.session.save()
                             logger.info(f"   ✅ Session kaydedildi")
                         except Exception as save_error:
                             logger.warning(f"   ⚠️  Session kaydetme hatası (devam ediliyor): {save_error}")
+                            import traceback
+                            logger.warning(f"   Traceback: {traceback.format_exc()}")
                         
                         await client.disconnect()
+                        logger.info(f"   🔌 Client disconnect edildi")
                         
                         # Session dosyasının varlığını kontrol et
                         session_file = session_name + '.session'
+                        logger.info(f"   📁 Session dosyası kontrol ediliyor: {session_file}")
                         if os.path.exists(session_file):
-                            logger.info(f"   ✅ Session dosyası mevcut: {session_file}")
+                            file_size = os.path.getsize(session_file)
+                            logger.info(f"   ✅ Session dosyası mevcut: {session_file} (Boyut: {file_size} bytes)")
                             return {'success': True, 'message': 'Giriş başarılı!', 'requires_password': False}
                         else:
                             # Session dosyası yoksa bile, giriş başarılı olabilir (Telethon otomatik kaydeder)
-                            logger.warning(f"   ⚠️  Session dosyası bulunamadı ama giriş başarılı olabilir")
+                            logger.warning(f"   ⚠️  Session dosyası bulunamadı: {session_file}")
+                            logger.warning(f"   ⚠️  Session dizini: {os.path.dirname(session_file)}")
+                            logger.warning(f"   ⚠️  Dizin mevcut mu: {os.path.exists(os.path.dirname(session_file))}")
                             return {'success': True, 'message': 'Giriş başarılı!', 'requires_password': False}
                     except Exception as e:
                         error_msg = str(e)
