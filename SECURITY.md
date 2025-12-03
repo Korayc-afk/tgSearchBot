@@ -2,6 +2,21 @@
 
 ## 🔒 Güvenlik Önlemleri
 
+
+
+Login sayfasına git: http://ygw8gocgg8ggcskogkowwk0g.176.123.5.52.sslip.io/login
+Kullanıcı adı: padisah_admin
+Şifre: P@d1$@h2024!Secure#Admin
+
+
+
+
+22399479
+d5b12a75eed5b8795c5107e1321d38fb
+
+
+
+
 ### 1. Web Panel Şifre Koruması
 - Web paneline erişim için basit bir şifre koruması eklenebilir
 - Flask-Login veya basit session tabanlı authentication
