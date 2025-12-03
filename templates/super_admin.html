@@ -357,6 +357,51 @@
         </div>
     </div>
 
+    <!-- Tenant Config Modal -->
+    <div id="tenantConfigModal" class="modal">
+        <div class="modal-content" style="max-width: 600px; max-height: 90vh; overflow-y: auto;">
+            <h2 style="margin-bottom: 1.5rem;">Grup Ayarları: <span id="configTenantName"></span></h2>
+            <form onsubmit="saveTenantConfig(event)">
+                <input type="hidden" id="configTenantId">
+                <div class="form-group">
+                    <label>API ID</label>
+                    <input type="text" id="configApiId" placeholder="Telegram API ID">
+                </div>
+                <div class="form-group">
+                    <label>API Hash</label>
+                    <input type="text" id="configApiHash" placeholder="Telegram API Hash">
+                    <small style="color: #666; font-size: 12px;">Mevcut hash'i değiştirmek için yeni değer girin</small>
+                </div>
+                <div class="form-group">
+                    <label>Telefon Numarası</label>
+                    <input type="text" id="configPhoneNumber" placeholder="+90XXXXXXXXXX">
+                </div>
+                <div class="form-group">
+                    <label>Aranacak Kelimeler (virgülle ayırın)</label>
+                    <textarea id="configKeywords" rows="3" placeholder="kelime1, kelime2, kelime3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Aranacak Linkler (virgülle ayırın)</label>
+                    <textarea id="configLinks" rows="3" placeholder="link1, link2, link3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Tarama Zaman Aralığı</label>
+                    <select id="configScanTimeRange">
+                        <option value="1day">1 Gün</option>
+                        <option value="3days">3 Gün</option>
+                        <option value="7days">7 Gün</option>
+                        <option value="30days">30 Gün</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
+                    <button type="button" class="btn" onclick="closeModal('tenantConfigModal')">İptal</button>
+                    <button type="button" class="btn btn-danger" onclick="clearTenantConfig()" style="margin-right: auto;">🗑️ Temizle</button>
+                    <button type="submit" class="btn btn-primary">Kaydet</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Toast -->
     <div id="toast" class="toast"></div>
 
@@ -596,6 +641,7 @@
                             <td>${new Date(tenant.created_at).toLocaleDateString('tr-TR')}</td>
                             <td>
                                 <button class="btn btn-primary" onclick="openEditTenantModal(${tenant.id}, '${tenant.name.replace(/'/g, "\\'")}', ${tenant.is_active})" style="margin-right: 0.5rem;">Düzenle</button>
+                                <button class="btn" onclick="openTenantConfigModal(${tenant.id}, '${tenant.name.replace(/'/g, "\\'")}')" style="margin-right: 0.5rem; background: #28a745; color: white;">⚙️ Ayarlar</button>
                                 <button class="btn btn-danger" onclick="deleteTenant(${tenant.id})">Sil</button>
                             </td>
                         `;
@@ -697,6 +743,101 @@
                 }
             } catch (error) {
                 showToast('Grup silinirken hata oluştu', 'error');
+            }
+        }
+
+        // Tenant Config Fonksiyonları
+        async function openTenantConfigModal(tenantId, tenantName) {
+            document.getElementById('configTenantId').value = tenantId;
+            document.getElementById('configTenantName').textContent = tenantName;
+            
+            // Config'i yükle
+            try {
+                const res = await fetch(`/api/super-admin/tenants/${tenantId}/config`);
+                const data = await res.json();
+                
+                if (data.success && data.config) {
+                    const config = data.config;
+                    document.getElementById('configApiId').value = config.api_id || '';
+                    document.getElementById('configApiHash').value = config.api_hash || '';
+                    document.getElementById('configPhoneNumber').value = config.phone_number || '';
+                    document.getElementById('configKeywords').value = (config.search_keywords || []).join(', ');
+                    document.getElementById('configLinks').value = (config.search_links || []).join(', ');
+                    document.getElementById('configScanTimeRange').value = config.scan_time_range || '7days';
+                } else {
+                    // Config yoksa boş bırak
+                    document.getElementById('configApiId').value = '';
+                    document.getElementById('configApiHash').value = '';
+                    document.getElementById('configPhoneNumber').value = '';
+                    document.getElementById('configKeywords').value = '';
+                    document.getElementById('configLinks').value = '';
+                    document.getElementById('configScanTimeRange').value = '7days';
+                }
+            } catch (error) {
+                console.error('Config yüklenirken hata:', error);
+                // Hata olsa bile modalı aç
+            }
+            
+            document.getElementById('tenantConfigModal').classList.add('active');
+        }
+
+        async function saveTenantConfig(event) {
+            event.preventDefault();
+            const tenantId = document.getElementById('configTenantId').value;
+            
+            const config = {
+                api_id: document.getElementById('configApiId').value.trim() || null,
+                api_hash: document.getElementById('configApiHash').value.trim() || null,
+                phone_number: document.getElementById('configPhoneNumber').value.trim() || null,
+                search_keywords: document.getElementById('configKeywords').value.split(',').map(k => k.trim()).filter(k => k),
+                search_links: document.getElementById('configLinks').value.split(',').map(l => l.trim()).filter(l => l),
+                scan_time_range: document.getElementById('configScanTimeRange').value
+            };
+            
+            try {
+                const res = await fetch(`/api/super-admin/tenants/${tenantId}/config`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(config)
+                });
+                
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Grup ayarları kaydedildi!');
+                    closeModal('tenantConfigModal');
+                } else {
+                    showToast(data.message || 'Ayarlar kaydedilemedi!', 'error');
+                }
+            } catch (error) {
+                showToast('Ayarlar kaydedilirken hata oluştu', 'error');
+            }
+        }
+
+        async function clearTenantConfig() {
+            if (!confirm('Bu grubun tüm ayarlarını silmek istediğinize emin misiniz?')) return;
+            
+            const tenantId = document.getElementById('configTenantId').value;
+            
+            try {
+                const res = await fetch(`/api/super-admin/tenants/${tenantId}/config`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Grup ayarları temizlendi!');
+                    // Form'u temizle
+                    document.getElementById('configApiId').value = '';
+                    document.getElementById('configApiHash').value = '';
+                    document.getElementById('configPhoneNumber').value = '';
+                    document.getElementById('configKeywords').value = '';
+                    document.getElementById('configLinks').value = '';
+                    document.getElementById('configScanTimeRange').value = '7days';
+                } else {
+                    showToast(data.message || 'Ayarlar temizlenemedi!', 'error');
+                }
+            } catch (error) {
+                showToast('Ayarlar temizlenirken hata oluştu', 'error');
             }
         }
     </script>

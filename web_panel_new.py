@@ -746,6 +746,87 @@ def delete_user(user_id):
     except Exception as e:
         return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
 
+@app.route('/api/super-admin/tenants/<int:tenant_id>/config', methods=['GET'])
+@login_required
+@require_super_admin
+def get_tenant_config_super_admin(tenant_id):
+    """Süper admin için tenant config'ini al"""
+    config = get_tenant_config(tenant_id)
+    if not config:
+        return jsonify({'success': False, 'message': 'Config bulunamadı!'})
+    
+    return jsonify({
+        'success': True,
+        'config': {
+            'api_id': config.api_id or '',
+            'api_hash': config.get_api_hash() if config.api_hash_encrypted else '',
+            'phone_number': config.phone_number or '',
+            'search_keywords': config.search_keywords or [],
+            'search_links': config.search_links or [],
+            'scan_time_range': config.scan_time_range or '7days'
+        }
+    })
+
+@app.route('/api/super-admin/tenants/<int:tenant_id>/config', methods=['PUT'])
+@login_required
+@require_super_admin
+def update_tenant_config_super_admin(tenant_id):
+    """Süper admin için tenant config'ini güncelle"""
+    try:
+        data = request.json
+        update_data = {}
+        
+        if 'api_id' in data:
+            update_data['api_id'] = data['api_id'] if data['api_id'] else None
+        if 'api_hash' in data and data['api_hash']:
+            update_data['api_hash'] = data['api_hash']
+        if 'phone_number' in data:
+            update_data['phone_number'] = data['phone_number'] if data['phone_number'] else None
+        if 'search_keywords' in data:
+            update_data['search_keywords'] = data['search_keywords']
+        if 'search_links' in data:
+            update_data['search_links'] = data['search_links']
+        if 'scan_time_range' in data:
+            update_data['scan_time_range'] = data['scan_time_range']
+        
+        config = update_tenant_config(tenant_id, **update_data)
+        if config:
+            return jsonify({'success': True, 'message': 'Ayarlar kaydedildi!'})
+        else:
+            return jsonify({'success': False, 'message': 'Config bulunamadı!'})
+    except Exception as e:
+        logger.error(f"   ❌ Tenant config güncelleme hatası: {str(e)}")
+        logger.error(f"   Traceback: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}'}), 500
+
+@app.route('/api/super-admin/tenants/<int:tenant_id>/config', methods=['DELETE'])
+@login_required
+@require_super_admin
+def delete_tenant_config_super_admin(tenant_id):
+    """Süper admin için tenant config'ini temizle"""
+    try:
+        db = SessionLocal()
+        try:
+            config = db.query(TenantConfig).filter_by(tenant_id=tenant_id).first()
+            if config:
+                config.api_id = None
+                config.api_hash_encrypted = None
+                config.phone_number = None
+                config.group_ids = []
+                config.search_keywords = []
+                config.search_links = []
+                config.scan_time_range = '7days'
+                db.commit()
+                return jsonify({'success': True, 'message': 'Ayarlar temizlendi!'})
+            else:
+                return jsonify({'success': False, 'message': 'Config bulunamadı!'})
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"   ❌ Tenant config silme hatası: {str(e)}")
+        logger.error(f"   Traceback: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}'}), 500
+
 @app.route('/api/super-admin/tenants/<int:tenant_id>/results')
 @login_required
 @require_super_admin
@@ -1644,7 +1725,7 @@ def clear_results_legacy():
 @app.route('/api/telegram-login', methods=['POST'])
 @login_required
 def telegram_login_legacy():
-    """Telegram'a giriş yap (eski format)"""
+    """Telegram'a giriş yap (eski format) - require_tenant_access bypass"""
     try:
         logger.info("📥 POST /api/telegram-login çağrıldı")
         
@@ -1662,11 +1743,170 @@ def telegram_login_legacy():
             logger.warning("   ⚠️  Tenant bulunamadı!")
             return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
         
-        return telegram_login(tenant_id)
+        # Erişim kontrolü - süper admin ise geç, değilse kontrol et
+        if not current_user.is_super_admin:
+            if not current_user.can_access_tenant(tenant_id):
+                logger.warning(f"   ⚠️  Kullanıcı {current_user.username} (ID: {current_user.id}) tenant {tenant_id} için yetkisiz erişim denemesi!")
+                return jsonify({'success': False, 'message': 'Bu gruba erişim yetkiniz yok!'}), 403
+        
+        # telegram_login fonksiyonunun içeriğini buraya kopyala (require_tenant_access bypass)
+        action = data.get('action')
+        phone = data.get('phone', '').strip()
+        
+        config = get_tenant_config(tenant_id)
+        if not config or not config.api_id or not config.get_api_hash():
+            return jsonify({'success': False, 'message': 'API bilgileri eksik!'})
+        
+        # Tenant slug'ını al (session içinde)
+        db = SessionLocal()
+        try:
+            tenant = db.query(Tenant).filter_by(id=tenant_id).first()
+            if not tenant:
+                return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
+            tenant_slug = tenant.slug
+        finally:
+            db.close()
+        
+        session_path = config.session_file_path or f'tenants/{tenant_slug}/session.session'
+        
+        # Session dizinini oluştur
+        session_dir = os.path.dirname(session_path)
+        if session_dir and not os.path.exists(session_dir):
+            os.makedirs(session_dir, exist_ok=True)
+        
+        # Session dosya adını düzelt
+        if not os.path.isabs(session_path):
+            session_path = os.path.abspath(session_path)
+        
+        session_name = session_path.replace('.session', '')
+        
+        # Session dosyasının dizinini tekrar kontrol et ve oluştur
+        session_dir = os.path.dirname(session_name)
+        if session_dir and not os.path.exists(session_dir):
+            os.makedirs(session_dir, exist_ok=True)
+        
+        client = TelegramClient(session_name, config.api_id, config.get_api_hash())
+        
+        async def handle_login():
+            try:
+                await client.connect()
+                
+                if await client.is_user_authorized():
+                    await client.disconnect()
+                    return {'success': True, 'message': 'Zaten giriş yapılmış!', 'requires_password': False}
+                
+                if action == 'send_code':
+                    try:
+                        sent_code = await client.send_code_request(phone)
+                        client.session.save()
+                        await client.disconnect()
+                        return {'success': True, 'message': 'Kod gönderildi!'}
+                    except Exception as e:
+                        error_msg = str(e)
+                        try:
+                            await client.disconnect()
+                        except:
+                            pass
+                        if 'PHONE_NUMBER_INVALID' in error_msg:
+                            return {'success': False, 'message': 'Telefon numarası geçersiz!'}
+                        elif 'FLOOD_WAIT' in error_msg:
+                            return {'success': False, 'message': 'Çok fazla deneme! Lütfen bekleyin.'}
+                        else:
+                            return {'success': False, 'message': f'Hata: {error_msg}'}
+                
+                elif action == 'verify_code':
+                    code = data.get('code', '').strip()
+                    if not code:
+                        return {'success': False, 'message': 'Kod gerekli!'}
+                    
+                    try:
+                        result = await client.sign_in(phone, code)
+                        client.session.save()
+                        await client.disconnect()
+                        
+                        if os.path.exists(session_path):
+                            return {'success': True, 'message': 'Giriş başarılı!', 'requires_password': False}
+                        else:
+                            return {'success': False, 'message': 'Session kaydedilemedi.'}
+                    except Exception as e:
+                        error_msg = str(e)
+                        try:
+                            await client.disconnect()
+                        except:
+                            pass
+                        
+                        if 'PASSWORD' in error_msg or 'SESSION_PASSWORD_NEEDED' in error_msg:
+                            try:
+                                client.session.save()
+                            except:
+                                pass
+                            return {'success': True, 'message': 'İki faktörlü doğrulama gerekiyor', 'requires_password': True}
+                        elif 'PHONE_CODE_INVALID' in error_msg:
+                            return {'success': False, 'message': 'Kod geçersiz!'}
+                        elif 'PHONE_CODE_EXPIRED' in error_msg:
+                            return {'success': False, 'message': 'Kod süresi dolmuş!'}
+                        else:
+                            return {'success': False, 'message': f'Hata: {error_msg}'}
+                
+                elif action == 'verify_password':
+                    password = data.get('password', '')
+                    if not password:
+                        return {'success': False, 'message': 'Şifre gerekli!'}
+                    
+                    try:
+                        await client.sign_in(password=password)
+                        client.session.save()
+                        await client.disconnect()
+                        
+                        if os.path.exists(session_path):
+                            return {'success': True, 'message': 'Giriş başarılı!'}
+                        else:
+                            return {'success': False, 'message': 'Session kaydedilemedi.'}
+                    except Exception as e:
+                        error_msg = str(e)
+                        try:
+                            await client.disconnect()
+                        except:
+                            pass
+                        if 'PASSWORD' in error_msg:
+                            return {'success': False, 'message': 'Şifre yanlış!'}
+                        else:
+                            return {'success': False, 'message': f'Hata: {error_msg}'}
+                else:
+                    return {'success': False, 'message': 'Geçersiz işlem!'}
+            except Exception as e:
+                error_msg = str(e)
+                try:
+                    await client.disconnect()
+                except:
+                    pass
+                return {'success': False, 'message': f'Hata: {error_msg}'}
+        
+        # Event loop sorununu çöz
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        try:
+            result = loop.run_until_complete(handle_login())
+        finally:
+            try:
+                pending = asyncio.all_tasks(loop)
+                for task in pending:
+                    task.cancel()
+            except:
+                pass
+        
+        return jsonify(result)
     except Exception as e:
-        logger.error(f"   ❌ Hata: {str(e)}")
+        logger.error(f"   ❌ Telegram login hatası: {str(e)}")
         logger.error(f"   Traceback: {traceback.format_exc()}")
-        return jsonify({'success': False, 'message': f'Hata: {str(e)}'}), 500
+        return jsonify({'success': False, 'message': f'Giriş hatası: {str(e)}'}), 500
 
 @app.route('/api/scan', methods=['POST'])
 @login_required
