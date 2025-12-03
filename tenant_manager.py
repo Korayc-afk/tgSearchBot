@@ -131,15 +131,26 @@ def get_user_tenants(user_id):
         # Süper admin ise tüm tenant'ları döndür
         user = db.query(User).filter_by(id=user_id).first()
         if user and user.role == 'super_admin':
-            return db.query(Tenant).filter_by(is_active=True).all()
+            tenants = db.query(Tenant).filter_by(is_active=True).all()
+        else:
+            # Normal kullanıcı ise sadece erişebildiği tenant'ları döndür
+            user_tenants = db.query(UserTenant).filter_by(user_id=user_id).all()
+            tenant_ids = [ut.tenant_id for ut in user_tenants]
+            tenants = db.query(Tenant).filter(
+                Tenant.id.in_(tenant_ids),
+                Tenant.is_active == True
+            ).all()
         
-        # Normal kullanıcı ise sadece erişebildiği tenant'ları döndür
-        user_tenants = db.query(UserTenant).filter_by(user_id=user_id).all()
-        tenant_ids = [ut.tenant_id for ut in user_tenants]
-        return db.query(Tenant).filter(
-            Tenant.id.in_(tenant_ids),
-            Tenant.is_active == True
-        ).all()
+        # Session dışında kullanım için expunge
+        for tenant in tenants:
+            # Lazy loading için gerekli alanları yükle
+            _ = tenant.id
+            _ = tenant.name
+            _ = tenant.slug
+            _ = tenant.is_active
+            db.expunge(tenant)
+        
+        return tenants
     finally:
         db.close()
 

@@ -127,6 +127,8 @@ def index():
             if first_tenant:
                 tenant_id = first_tenant.id
                 tenant_name = first_tenant.name
+                # Expunge yap
+                db.expunge(first_tenant)
         finally:
             db.close()
     else:
@@ -181,13 +183,19 @@ def super_admin_dashboard_data():
         # Tenant bazında istatistikler
         tenant_stats = []
         for tenant in tenants:
-            tenant_result_count = db.query(Result).filter_by(tenant_id=tenant.id).count()
+            # Tenant bilgilerini session içinde al
+            tenant_id = tenant.id
+            tenant_name = tenant.name
+            tenant_slug = tenant.slug
+            tenant_created_at = tenant.created_at
+            
+            tenant_result_count = db.query(Result).filter_by(tenant_id=tenant_id).count()
             tenant_stats.append({
-                'id': tenant.id,
-                'name': tenant.name,
-                'slug': tenant.slug,
+                'id': tenant_id,
+                'name': tenant_name,
+                'slug': tenant_slug,
                 'result_count': tenant_result_count,
-                'created_at': tenant.created_at.isoformat() if tenant.created_at else None
+                'created_at': tenant_created_at.isoformat() if tenant_created_at else None
             })
         
         return jsonify({
@@ -1069,9 +1077,10 @@ def export_results(tenant_id):
 @login_required
 def get_config_api_legacy():
     """Config'i getir (eski format)"""
-    tenant_id = get_current_tenant_id()
-    if not tenant_id:
-        return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
+    try:
+        tenant_id = get_current_tenant_id()
+        if not tenant_id:
+            return jsonify({'success': False, 'message': 'Tenant bulunamadı! Lütfen önce bir grup oluşturun.'})
     
     config = get_tenant_config(tenant_id)
     if not config:
@@ -1092,9 +1101,10 @@ def get_config_api_legacy():
 @login_required
 def save_config_api_legacy():
     """Config'i kaydet (eski format)"""
-    tenant_id = get_current_tenant_id()
-    if not tenant_id:
-        return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
+    try:
+        tenant_id = get_current_tenant_id()
+        if not tenant_id:
+            return jsonify({'success': False, 'message': 'Tenant bulunamadı! Lütfen önce bir grup oluşturun.'})
     
     try:
         data = request.json
