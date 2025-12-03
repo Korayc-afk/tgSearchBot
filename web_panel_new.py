@@ -1038,11 +1038,16 @@ def telegram_login(tenant_id):
         if not config or not config.api_id or not config.get_api_hash():
             return jsonify({'success': False, 'message': 'API bilgileri eksik!'})
         
-        # Tenant slug'ını al
-        tenant = get_tenant(tenant_id)
-        if not tenant:
-            return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
-        tenant_slug = tenant.slug
+        # Tenant slug'ını al (session içinde)
+        db = SessionLocal()
+        try:
+            tenant = db.query(Tenant).filter_by(id=tenant_id).first()
+            if not tenant:
+                return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
+            tenant_slug = tenant.slug
+        finally:
+            db.close()
+        
         session_path = config.session_file_path or f'tenants/{tenant_slug}/session.session'
         
         # Session dizinini oluştur

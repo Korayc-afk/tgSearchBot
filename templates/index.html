@@ -510,10 +510,7 @@
                 <form id="configForm">
                     <div class="form-group">
                         <label>API ID *</label>
-                        <div style="display: flex; gap: 10px;">
-                            <input type="text" id="api_id" placeholder="Telegram API ID" required style="flex: 1;">
-                            <button type="button" class="btn btn-secondary" onclick="testTelegramAPI()" id="test-api-btn">🧪 Test Et</button>
-                        </div>
+                        <input type="text" id="api_id" placeholder="Telegram API ID" required>
                         <small style="color: #666; font-size: 12px; margin-top: 5px; display: block;">
                             ** API ID ve API Hash nasıl alınır?<br>
                             1. https://my.telegram.org/apps adresine gidin<br>
@@ -533,11 +530,11 @@
                         <label>Telefon Numarası *</label>
                         <div style="display: flex; gap: 10px;">
                             <input type="text" id="phone_number" placeholder="+90XXXXXXXXXX" required style="flex: 1;">
-                            <button type="button" class="btn btn-primary" onclick="savePhoneNumber()" id="save-phone-btn">💾 Numara Ekle</button>
-                            <button type="button" class="btn btn-secondary" onclick="testPhoneNumber()" id="test-phone-btn">🧪 Test Et</button>
+                            <button type="button" class="btn btn-primary" onclick="savePhoneNumber()" id="save-phone-btn">💾 Kaydet</button>
+                            <button type="button" class="btn btn-secondary" onclick="testTelegramConnection()" id="test-connection-btn">🧪 Test Et</button>
                         </div>
                         <small style="color: #666; font-size: 12px; margin-top: 5px; display: block;">
-                            Telefon numaranızı girin ve "Numara Ekle" butonuna tıklayın. Ardından "Test Et" ile Telegram girişini test edin.
+                            <strong>Adımlar:</strong> 1) API ID ve API Hash girin → 2) Telefon numaranızı girin → 3) "Kaydet" ile kaydedin → 4) "Test Et" ile Telegram girişini yapın
                         </small>
                     </div>
 
@@ -1035,17 +1032,24 @@
             }
         }
         
-        // Telefon Numarası Test Et
-        async function testPhoneNumber() {
+        // Telegram Bağlantısını Test Et (Birleştirilmiş Fonksiyon)
+        async function testTelegramConnection() {
+            const apiId = document.getElementById('api_id').value.trim();
+            const apiHash = document.getElementById('api_hash').value.trim();
             const phoneNumber = document.getElementById('phone_number').value.trim();
-            const testBtn = document.getElementById('test-phone-btn');
+            const testBtn = document.getElementById('test-connection-btn');
+            
+            // Validasyon
+            if (!apiId || !apiHash) {
+                showToast('Lütfen API ID ve API Hash bilgilerini girin!', 'error');
+                return;
+            }
             
             if (!phoneNumber) {
                 showToast('Lütfen telefon numarası girin!', 'error');
                 return;
             }
             
-            // Telefon numarası formatını kontrol et
             if (!phoneNumber.startsWith('+')) {
                 showToast('Telefon numarası + ile başlamalı (örn: +905551234567)', 'error');
                 return;
@@ -1056,9 +1060,9 @@
             testBtn.innerHTML = '<span class="loading-spinner"></span> Test ediliyor...';
             
             try {
-                showToast('Telegram girişi test ediliyor...', 'info', 3000);
+                showToast('Telegram bağlantısı test ediliyor...', 'info', 3000);
                 
-                // Önce telefon numarasını kaydet (ayrı fonksiyon çağrısı olmadan)
+                // Önce tüm bilgileri kaydet
                 try {
                     const saveResponse = await fetch('/api/config', {
                         method: 'POST',
@@ -1066,75 +1070,63 @@
                             'Content-Type': 'application/json'
                         },
                         body: JSON.stringify({
+                            API_ID: apiId,
+                            API_HASH: apiHash,
                             PHONE_NUMBER: phoneNumber
                         })
                     });
                     const saveData = await saveResponse.json();
                     if (!saveData.success) {
-                        showToast(`⚠️ Telefon numarası kaydedilemedi: ${saveData.message}`, 'warning');
+                        showToast(`⚠️ Bilgiler kaydedilemedi: ${saveData.message}`, 'warning');
+                    } else {
+                        showToast('✅ Bilgiler kaydedildi, bağlantı test ediliyor...', 'success', 2000);
                     }
                 } catch (e) {
-                    console.warn('Telefon numarası kaydedilemedi:', e);
+                    console.warn('Bilgiler kaydedilemedi:', e);
                 }
                 
-                // Sonra Telegram login modalını aç
-                document.getElementById('login-phone').value = phoneNumber;
-                showLoginModal();
-                
-                // Otomatik kod gönder
-                setTimeout(() => {
-                    autoSendCode();
-                }, 500);
+                // API bağlantısını test et
+                try {
+                    const testResponse = await fetch('/api/test-telegram', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            API_ID: apiId,
+                            API_HASH: apiHash,
+                            PHONE_NUMBER: phoneNumber
+                        })
+                    });
+                    
+                    const testData = await testResponse.json();
+                    
+                    if (testData.success) {
+                        showToast('✅ Telegram API bağlantısı başarılı! Giriş yapılmış.', 'success');
+                    } else {
+                        // API doğru ama giriş yapılmamış, login modalını aç
+                        if (testData.message.includes('giriş yapılmamış')) {
+                            document.getElementById('login-phone').value = phoneNumber;
+                            showLoginModal();
+                            setTimeout(() => {
+                                autoSendCode();
+                            }, 500);
+                        } else {
+                            showToast(`❌ API Test Hatası: ${testData.message}`, 'error');
+                        }
+                    }
+                } catch (error) {
+                    // API test hatası, yine de login modalını aç
+                    console.warn('API test hatası:', error);
+                    document.getElementById('login-phone').value = phoneNumber;
+                    showLoginModal();
+                    setTimeout(() => {
+                        autoSendCode();
+                    }, 500);
+                }
                 
             } catch (error) {
                 showToast(`❌ Hata: ${error.message}`, 'error');
-            } finally {
-                // Butonu tekrar aktif et
-                testBtn.disabled = false;
-                testBtn.innerHTML = '🧪 Test Et';
-            }
-        }
-        
-        // Telegram API Test Fonksiyonu
-        async function testTelegramAPI() {
-            const apiId = document.getElementById('api_id').value.trim();
-            const apiHash = document.getElementById('api_hash').value.trim();
-            const phoneNumber = document.getElementById('phone_number').value.trim();
-            const testBtn = document.getElementById('test-api-btn');
-            
-            if (!apiId || !apiHash) {
-                showToast('Lütfen API ID ve API Hash bilgilerini girin!', 'error');
-                return;
-            }
-            
-            // Butonu devre dışı bırak
-            testBtn.disabled = true;
-            testBtn.innerHTML = '<span class="loading-spinner"></span> Test ediliyor...';
-            
-            try {
-                showToast('Telegram API bağlantısı test ediliyor...', 'info', 3000);
-                
-                const response = await fetch('/api/test-telegram', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        API_ID: apiId,
-                        API_HASH: apiHash,
-                        PHONE_NUMBER: phoneNumber
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    showToast('✅ Telegram API bağlantısı başarılı! API bilgileri doğru.', 'success');
-                } else {
-                    showToast(`❌ API Test Hatası: ${data.message}`, 'error');
-                }
-            } catch (error) {
-                showToast(`❌ Bağlantı hatası: ${error.message}`, 'error');
             } finally {
                 // Butonu tekrar aktif et
                 testBtn.disabled = false;
@@ -1495,16 +1487,10 @@
                 errorMsg += 'Lütfen telefon numarası alanındaki "🧪 Test Et" butonuna tıklayarak Telegram girişini yapın.';
                 // Giriş modalını otomatik aç
                 setTimeout(() => {
-                    if (typeof testPhoneNumber === 'function') {
-                        // Telefon numarası varsa test et, yoksa modal aç
-                        const phoneNumber = document.getElementById('phone_number').value.trim();
-                        if (phoneNumber) {
-                            testPhoneNumber();
-                        } else {
-                            if (typeof showLoginModal === 'function') {
-                                showLoginModal();
-                            }
-                        }
+                    const phoneNumber = document.getElementById('phone_number').value.trim();
+                    if (phoneNumber && typeof testTelegramConnection === 'function') {
+                        // Telefon numarası varsa test et
+                        testTelegramConnection();
                     } else if (typeof showLoginModal === 'function') {
                         showLoginModal();
                     }
