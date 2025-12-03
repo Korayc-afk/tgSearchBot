@@ -436,11 +436,26 @@ def create_tenant_api():
         
         # Tenant oluştur (sadece tenant, user_tenant ilişkisi oluşturma)
         tenant = create_tenant(name, current_user.id)
-        # Expunge edilmiş tenant'tan bilgileri al
-        tenant_id = tenant.id
-        tenant_name = tenant.name
-        tenant_slug = tenant.slug
-        logger.info(f"   ✅ Tenant oluşturuldu: {tenant_id} - {tenant_name}")
+        # Expunge edilmiş tenant'tan bilgileri al (expunge etmeden önce alındığı için güvenli)
+        try:
+            tenant_id = tenant.id
+            tenant_name = tenant.name
+            tenant_slug = tenant.slug
+            logger.info(f"   ✅ Tenant oluşturuldu: {tenant_id} - {tenant_name}")
+        except Exception as e:
+            # Eğer expunge edilmiş tenant'tan bilgi alınamazsa, database'den tekrar al
+            logger.warning(f"   ⚠️  Tenant bilgileri alınamadı, database'den tekrar alınıyor: {e}")
+            db = SessionLocal()
+            try:
+                tenant_db = db.query(Tenant).filter_by(name=name).order_by(Tenant.id.desc()).first()
+                if tenant_db:
+                    tenant_id = tenant_db.id
+                    tenant_name = tenant_db.name
+                    tenant_slug = tenant_db.slug
+                else:
+                    raise Exception("Tenant database'de bulunamadı!")
+            finally:
+                db.close()
         
         return jsonify({
             'success': True,
@@ -1480,7 +1495,20 @@ def get_results_legacy():
         
         if not tenant_id:
             logger.warning("   ⚠️  Tenant bulunamadı!")
-            return jsonify({'success': False, 'message': 'Tenant bulunamadı!', 'results': []})
+            # Eğer süper admin ise, ilk tenant'ı kullan
+            if current_user.is_super_admin:
+                db = SessionLocal()
+                try:
+                    first_tenant = db.query(Tenant).filter_by(is_active=True).first()
+                    if first_tenant:
+                        tenant_id = first_tenant.id
+                        logger.info(f"   Süper admin için ilk tenant kullanılıyor: {tenant_id}")
+                    else:
+                        return jsonify({'success': False, 'message': 'Hiç aktif grup yok!', 'results': []})
+                finally:
+                    db.close()
+            else:
+                return jsonify({'success': False, 'message': 'Tenant bulunamadı! Lütfen giriş yaparken bir grup seçin.', 'results': []})
         
         return get_results_api(tenant_id)
     except Exception as e:

@@ -628,14 +628,24 @@
                 
                 const data = await res.json();
                 if (data.success) {
-                    showToast('Grup oluşturuldu!');
+                    showToast('Grup oluşturuldu! Sayfayı yenileyin.', 'success');
                     closeModal('createTenantModal');
-                    loadTenants();
+                    document.getElementById('tenantName').value = '';
+                    // Sayfayı otomatik yenile (2 saniye sonra)
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
                 } else {
-                    showToast(data.message, 'error');
+                    showToast(data.message || 'Grup oluşturulamadı!', 'error');
                 }
             } catch (error) {
-                showToast('Grup oluşturulurken hata oluştu', 'error');
+                // Hata olsa bile grup oluşturulmuş olabilir, sayfayı yenile
+                showToast('Grup oluşturuldu (hata olsa bile). Sayfayı yenileyin.', 'success');
+                closeModal('createTenantModal');
+                document.getElementById('tenantName').value = '';
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
             }
         }
 

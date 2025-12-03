@@ -83,8 +83,19 @@ def create_tenant(name, created_by_user_id=None):
         with open(config.results_file_path, 'w', encoding='utf-8') as f:
             f.write('')
         
+        # Expunge etmeden önce gerekli değerleri al
+        tenant_id = tenant.id
+        tenant_name = tenant.name
+        tenant_slug = tenant.slug
+        
         # Session dışında kullanım için expunge
         db.expunge(tenant)
+        
+        # Expunge edilmiş tenant'a değerleri geri yükle (sadece okuma için)
+        tenant.id = tenant_id
+        tenant.name = tenant_name
+        tenant.slug = tenant_slug
+        
         return tenant
     except Exception as e:
         db.rollback()
