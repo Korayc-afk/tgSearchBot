@@ -363,6 +363,7 @@
     <script>
         // Sayfa yüklendiğinde
         document.addEventListener('DOMContentLoaded', function() {
+            loadTenants();
             loadUsers();
         });
 
@@ -574,6 +575,119 @@
             setTimeout(() => {
                 toast.classList.remove('show');
             }, 5000);
+        }
+
+        // Grup Yönetimi Fonksiyonları
+        async function loadTenants() {
+            try {
+                const res = await fetch('/api/super-admin/tenants');
+                const data = await res.json();
+                
+                if (data.success) {
+                    const tbody = document.getElementById('tenantsTableBody');
+                    tbody.innerHTML = '';
+                    
+                    data.tenants.forEach(tenant => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>${tenant.id}</td>
+                            <td>${tenant.name}</td>
+                            <td><span class="badge ${tenant.is_active ? 'badge-success' : 'badge-danger'}">${tenant.is_active ? 'Aktif' : 'Pasif'}</span></td>
+                            <td>${new Date(tenant.created_at).toLocaleDateString('tr-TR')}</td>
+                            <td>
+                                <button class="btn btn-primary" onclick="openEditTenantModal(${tenant.id}, '${tenant.name.replace(/'/g, "\\'")}', ${tenant.is_active})" style="margin-right: 0.5rem;">Düzenle</button>
+                                <button class="btn btn-danger" onclick="deleteTenant(${tenant.id})">Sil</button>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                    
+                    document.getElementById('tenantsLoading').style.display = 'none';
+                    document.getElementById('tenantsTable').style.display = 'table';
+                }
+            } catch (error) {
+                showToast('Gruplar yüklenirken hata oluştu', 'error');
+            }
+        }
+
+        function openCreateTenantModal() {
+            document.getElementById('tenantName').value = '';
+            document.getElementById('createTenantModal').classList.add('active');
+        }
+
+        async function createTenant(event) {
+            event.preventDefault();
+            const name = document.getElementById('tenantName').value;
+            
+            try {
+                const res = await fetch('/api/super-admin/tenants', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name})
+                });
+                
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Grup oluşturuldu!');
+                    closeModal('createTenantModal');
+                    loadTenants();
+                } else {
+                    showToast(data.message, 'error');
+                }
+            } catch (error) {
+                showToast('Grup oluşturulurken hata oluştu', 'error');
+            }
+        }
+
+        function openEditTenantModal(tenantId, tenantName, isActive) {
+            document.getElementById('editTenantId').value = tenantId;
+            document.getElementById('editTenantName').value = tenantName;
+            document.getElementById('editTenantStatus').value = isActive ? 'true' : 'false';
+            document.getElementById('editTenantModal').classList.add('active');
+        }
+
+        async function updateTenant(event) {
+            event.preventDefault();
+            const tenantId = document.getElementById('editTenantId').value;
+            const name = document.getElementById('editTenantName').value;
+            const isActive = document.getElementById('editTenantStatus').value === 'true';
+            
+            try {
+                const res = await fetch(`/api/super-admin/tenants/${tenantId}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name, is_active: isActive})
+                });
+                
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Grup güncellendi!');
+                    closeModal('editTenantModal');
+                    loadTenants();
+                } else {
+                    showToast(data.message, 'error');
+                }
+            } catch (error) {
+                showToast('Grup güncellenirken hata oluştu', 'error');
+            }
+        }
+
+        async function deleteTenant(id) {
+            if (!confirm('Bu grubu silmek istediğinize emin misiniz? Tüm veriler silinecek!')) return;
+            
+            try {
+                const res = await fetch(`/api/super-admin/tenants/${id}`, {method: 'DELETE'});
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Grup silindi!');
+                    loadTenants();
+                    loadUsers(); // Kullanıcı listesini de yenile
+                } else {
+                    showToast(data.message, 'error');
+                }
+            } catch (error) {
+                showToast('Grup silinirken hata oluştu', 'error');
+            }
         }
     </script>
 </body>
