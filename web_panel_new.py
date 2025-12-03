@@ -481,6 +481,55 @@ def list_users():
     finally:
         db.close()
 
+@app.route('/api/super-admin/users/<int:user_id>/tenants', methods=['GET'])
+@login_required
+@require_super_admin
+def get_user_tenants_api(user_id):
+    """Kullanıcının grup bilgilerini al"""
+    db = SessionLocal()
+    try:
+        user_tenants = db.query(UserTenant).filter_by(user_id=user_id).all()
+        tenant_ids = [ut.tenant_id for ut in user_tenants]
+        return jsonify({
+            'success': True,
+            'tenants': tenant_ids
+        })
+    finally:
+        db.close()
+
+@app.route('/api/super-admin/users/<int:user_id>/tenants', methods=['PUT'])
+@login_required
+@require_super_admin
+def update_user_tenants_api(user_id):
+    """Kullanıcının grup ilişkilerini güncelle"""
+    try:
+        data = request.json
+        tenant_ids = data.get('tenant_ids', [])
+        
+        db = SessionLocal()
+        try:
+            # Mevcut ilişkileri sil
+            db.query(UserTenant).filter_by(user_id=user_id).delete()
+            
+            # Yeni ilişkileri ekle
+            for tenant_id in tenant_ids:
+                user_tenant = UserTenant(
+                    user_id=user_id,
+                    tenant_id=tenant_id,
+                    role='owner'
+                )
+                db.add(user_tenant)
+            
+            db.commit()
+            return jsonify({'success': True, 'message': 'Grup ilişkileri güncellendi!'})
+        except Exception as e:
+            db.rollback()
+            return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
+        finally:
+            db.close()
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
+
 @app.route('/api/super-admin/users', methods=['POST'])
 @login_required
 @require_super_admin

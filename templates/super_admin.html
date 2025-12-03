@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Süper Admin - Telegram Monitoring</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <title>Süper Admin - Kullanıcı Yönetimi</title>
     <style>
         * {
             margin: 0;
@@ -69,69 +68,9 @@
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 2rem auto;
             padding: 0 2rem;
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 2rem;
-        }
-
-        .stat-card {
-            background: white;
-            padding: 1.5rem;
-            border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-            border-left: 4px solid #667eea;
-        }
-
-        .stat-card h3 {
-            color: #666;
-            font-size: 0.9rem;
-            margin-bottom: 0.5rem;
-            text-transform: uppercase;
-        }
-
-        .stat-card .value {
-            font-size: 2rem;
-            font-weight: bold;
-            color: #667eea;
-        }
-
-        .tabs {
-            display: flex;
-            gap: 1rem;
-            margin-bottom: 2rem;
-            border-bottom: 2px solid #e0e0e0;
-        }
-
-        .tab {
-            padding: 1rem 2rem;
-            cursor: pointer;
-            border: none;
-            background: none;
-            font-size: 1rem;
-            color: #666;
-            border-bottom: 3px solid transparent;
-            transition: all 0.3s;
-        }
-
-        .tab.active {
-            color: #667eea;
-            border-bottom-color: #667eea;
-            font-weight: 600;
-        }
-
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
         }
 
         .card {
@@ -147,6 +86,12 @@
             color: #333;
         }
 
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #666;
+        }
+
         .table {
             width: 100%;
             border-collapse: collapse;
@@ -156,13 +101,13 @@
         .table td {
             padding: 1rem;
             text-align: left;
-            border-bottom: 1px solid #e0e0e0;
+            border-bottom: 1px solid #eee;
         }
 
         .table th {
             background: #f8f9fa;
             font-weight: 600;
-            color: #666;
+            color: #333;
         }
 
         .table tr:hover {
@@ -171,9 +116,9 @@
 
         .badge {
             padding: 0.25rem 0.75rem;
-            border-radius: 20px;
+            border-radius: 12px;
             font-size: 0.85rem;
-            font-weight: 600;
+            font-weight: 500;
         }
 
         .badge-success {
@@ -220,7 +165,7 @@
         .form-group label {
             display: block;
             margin-bottom: 0.5rem;
-            font-weight: 600;
+            font-weight: 500;
             color: #333;
         }
 
@@ -228,171 +173,68 @@
         .form-group select {
             width: 100%;
             padding: 0.75rem;
-            border: 2px solid #e0e0e0;
+            border: 1px solid #ddd;
             border-radius: 6px;
-            font-size: 1rem;
-            transition: border-color 0.3s;
+            font-size: 14px;
         }
 
-        .form-group input:focus,
-        .form-group select:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .chart-container {
-            position: relative;
-            height: 300px;
-            margin-bottom: 2rem;
-        }
-
-        .loading {
-            text-align: center;
-            padding: 2rem;
-            color: #666;
+        .form-group select[multiple] {
+            height: 150px;
         }
 
         .toast {
             position: fixed;
-            top: 20px;
-            right: 20px;
+            bottom: 2rem;
+            right: 2rem;
             padding: 1rem 1.5rem;
             background: #28a745;
             color: white;
             border-radius: 6px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.3s;
             z-index: 2000;
-            display: none;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
         }
 
         .toast.error {
             background: #dc3545;
         }
-
-        .toast.show {
-            display: block;
-            animation: slideIn 0.3s;
-        }
-
-        @keyframes slideIn {
-            from {
-                transform: translateX(400px);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
     </style>
 </head>
 <body>
     <nav class="navbar">
-        <h1>🚀 Süper Admin Panel</h1>
+        <h1>🔐 Süper Admin - Kullanıcı Yönetimi</h1>
         <div class="navbar-actions">
-            <span>{{ current_user.username }}</span>
             <a href="/logout" class="btn btn-primary">Çıkış</a>
         </div>
     </nav>
 
     <div class="container">
-        <!-- İstatistikler -->
-        <div class="stats-grid" id="statsGrid">
-            <div class="stat-card">
-                <h3>Toplam Grup</h3>
-                <div class="value" id="totalTenants">-</div>
-            </div>
-            <div class="stat-card">
-                <h3>Toplam Kullanıcı</h3>
-                <div class="value" id="totalUsers">-</div>
-            </div>
-            <div class="stat-card">
-                <h3>Toplam Sonuç</h3>
-                <div class="value" id="totalResults">-</div>
-            </div>
-            <div class="stat-card">
-                <h3>Son 7 Gün</h3>
-                <div class="value" id="recentResults">-</div>
-            </div>
-        </div>
-
-        <!-- Grafikler -->
         <div class="card">
-            <h2>📊 Sonuç Trendi</h2>
-            <div class="chart-container">
-                <canvas id="resultsChart"></canvas>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h2>Kullanıcı Yönetimi</h2>
+                <button class="btn btn-primary" onclick="openCreateUserModal()">+ Yeni Kullanıcı</button>
             </div>
-        </div>
-
-        <!-- Tabs -->
-        <div class="tabs">
-            <button class="tab active" onclick="switchTab('tenants')">Gruplar</button>
-            <button class="tab" onclick="switchTab('users')">Kullanıcılar</button>
-        </div>
-
-        <!-- Tenants Tab -->
-        <div id="tenantsTab" class="tab-content active">
-            <div class="card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                    <h2>Grup Yönetimi</h2>
-                    <button class="btn btn-primary" onclick="openCreateTenantModal()">+ Yeni Grup</button>
-                </div>
-                <div class="loading" id="tenantsLoading">Yükleniyor...</div>
-                <table class="table" id="tenantsTable" style="display: none;">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Grup Adı</th>
-                            <th>Sonuç Sayısı</th>
-                            <th>Durum</th>
-                            <th>Oluşturulma</th>
-                            <th>İşlemler</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tenantsTableBody"></tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- Users Tab -->
-        <div id="usersTab" class="tab-content">
-            <div class="card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                    <h2>Kullanıcı Yönetimi</h2>
-                    <button class="btn btn-primary" onclick="openCreateUserModal()">+ Yeni Kullanıcı</button>
-                </div>
-                <div class="loading" id="usersLoading">Yükleniyor...</div>
-                <table class="table" id="usersTable" style="display: none;">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Kullanıcı Adı</th>
-                            <th>Şifre</th>
-                            <th>Rol</th>
-                            <th>Son Giriş</th>
-                            <th>İşlemler</th>
-                        </tr>
-                    </thead>
-                    <tbody id="usersTableBody"></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <!-- Create Tenant Modal -->
-    <div id="createTenantModal" class="modal">
-        <div class="modal-content">
-            <h2 style="margin-bottom: 1.5rem;">Yeni Grup Oluştur</h2>
-            <form onsubmit="createTenant(event)">
-                <div class="form-group">
-                    <label>Grup Adı</label>
-                    <input type="text" id="tenantName" required>
-                </div>
-                <div style="display: flex; gap: 1rem; justify-content: flex-end;">
-                    <button type="button" class="btn" onclick="closeModal('createTenantModal')">İptal</button>
-                    <button type="submit" class="btn btn-primary">Oluştur</button>
-                </div>
-            </form>
+            <div class="loading" id="usersLoading">Yükleniyor...</div>
+            <table class="table" id="usersTable" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Kullanıcı Adı</th>
+                        <th>Şifre</th>
+                        <th>Grup</th>
+                        <th>Son Giriş</th>
+                        <th>İşlemler</th>
+                    </tr>
+                </thead>
+                <tbody id="usersTableBody"></tbody>
+            </table>
         </div>
     </div>
 
@@ -407,18 +249,11 @@
                 </div>
                 <div class="form-group">
                     <label>Şifre</label>
-                    <input type="password" id="userPassword" required>
+                    <input type="text" id="userPassword" required>
                 </div>
                 <div class="form-group">
-                    <label>Rol</label>
-                    <select id="userRole" required>
-                        <option value="admin">Admin</option>
-                        <option value="super_admin">Süper Admin</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Grup Erişimi (Çoklu seçim için Ctrl/Cmd basılı tutun)</label>
-                    <select id="userTenants" multiple style="height: 150px;">
+                    <label>Grup Seç (Çoklu seçim için Ctrl/Cmd basılı tutun)</label>
+                    <select id="userTenants" multiple style="height: 150px;" required>
                         <!-- Dinamik doldurulacak -->
                     </select>
                 </div>
@@ -442,13 +277,12 @@
                 </div>
                 <div class="form-group">
                     <label>Yeni Şifre (Değiştirmek istemiyorsanız boş bırakın)</label>
-                    <input type="password" id="editUserPassword" placeholder="Şifre değiştirmek istemiyorsanız boş bırakın">
+                    <input type="text" id="editUserPassword" placeholder="Şifre değiştirmek istemiyorsanız boş bırakın">
                 </div>
                 <div class="form-group">
-                    <label>Rol</label>
-                    <select id="editUserRole" required>
-                        <option value="admin">Admin</option>
-                        <option value="super_admin">Süper Admin</option>
+                    <label>Grup Seç (Çoklu seçim için Ctrl/Cmd basılı tutun)</label>
+                    <select id="editUserTenants" multiple style="height: 150px;">
+                        <!-- Dinamik doldurulacak -->
                     </select>
                 </div>
                 <div style="display: flex; gap: 1rem; justify-content: flex-end;">
@@ -463,106 +297,10 @@
     <div id="toast" class="toast"></div>
 
     <script>
-        let resultsChart = null;
-
         // Sayfa yüklendiğinde
         document.addEventListener('DOMContentLoaded', function() {
-            loadDashboard();
-            loadTenants();
             loadUsers();
         });
-
-        function switchTab(tabName) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            
-            event.target.classList.add('active');
-            document.getElementById(tabName + 'Tab').classList.add('active');
-        }
-
-        async function loadDashboard() {
-            try {
-                const res = await fetch('/api/super-admin/dashboard');
-                const data = await res.json();
-                
-                if (data.success) {
-                    document.getElementById('totalTenants').textContent = data.stats.total_tenants;
-                    document.getElementById('totalUsers').textContent = data.stats.total_users;
-                    document.getElementById('totalResults').textContent = data.stats.total_results;
-                    document.getElementById('recentResults').textContent = data.stats.recent_results;
-                    
-                    // Grafik oluştur
-                    createResultsChart(data.tenant_stats);
-                }
-            } catch (error) {
-                showToast('Dashboard yüklenirken hata oluştu', 'error');
-            }
-        }
-
-        function createResultsChart(tenantStats) {
-            const ctx = document.getElementById('resultsChart').getContext('2d');
-            
-            if (resultsChart) {
-                resultsChart.destroy();
-            }
-            
-            resultsChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: tenantStats.map(t => t.name),
-                    datasets: [{
-                        label: 'Sonuç Sayısı',
-                        data: tenantStats.map(t => t.result_count),
-                        backgroundColor: 'rgba(102, 126, 234, 0.8)',
-                        borderColor: 'rgba(102, 126, 234, 1)',
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    }
-                }
-            });
-        }
-
-        async function loadTenants() {
-            try {
-                const res = await fetch('/api/super-admin/tenants');
-                const data = await res.json();
-                
-                if (data.success) {
-                    const tbody = document.getElementById('tenantsTableBody');
-                    tbody.innerHTML = '';
-                    
-                    data.tenants.forEach(tenant => {
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `
-                            <td>${tenant.id}</td>
-                            <td>${tenant.name}</td>
-                            <td>${tenant.result_count || 0}</td>
-                            <td><span class="badge ${tenant.is_active ? 'badge-success' : 'badge-danger'}">${tenant.is_active ? 'Aktif' : 'Pasif'}</span></td>
-                            <td>${new Date(tenant.created_at).toLocaleDateString('tr-TR')}</td>
-                            <td>
-                                <button class="btn btn-primary" onclick="createUserForTenant(${tenant.id}, '${tenant.name}')" style="margin-right: 0.5rem;">Kullanıcı Oluştur</button>
-                                <button class="btn btn-primary" onclick="viewTenantResults(${tenant.id})" style="margin-right: 0.5rem;">Sonuçlar</button>
-                                <button class="btn btn-danger" onclick="deleteTenant(${tenant.id})">Sil</button>
-                            </td>
-                        `;
-                        tbody.appendChild(tr);
-                    });
-                    
-                    document.getElementById('tenantsLoading').style.display = 'none';
-                    document.getElementById('tenantsTable').style.display = 'table';
-                }
-            } catch (error) {
-                showToast('Gruplar yüklenirken hata oluştu', 'error');
-            }
-        }
 
         async function loadUsers() {
             try {
@@ -573,21 +311,44 @@
                     const tbody = document.getElementById('usersTableBody');
                     tbody.innerHTML = '';
                     
-                    data.users.forEach(user => {
+                    // Kullanıcıların grup bilgilerini al
+                    const tenantsRes = await fetch('/api/super-admin/tenants');
+                    const tenantsData = await tenantsRes.json();
+                    const tenantsMap = {};
+                    if (tenantsData.success) {
+                        tenantsData.tenants.forEach(t => {
+                            tenantsMap[t.id] = t.name;
+                        });
+                    }
+                    
+                    // Kullanıcıların grup ilişkilerini al
+                    for (const user of data.users) {
+                        const userTenantsRes = await fetch(`/api/super-admin/users/${user.id}/tenants`);
+                        let userTenants = [];
+                        try {
+                            const userTenantsData = await userTenantsRes.json();
+                            if (userTenantsData.success) {
+                                userTenants = userTenantsData.tenants || [];
+                            }
+                        } catch (e) {
+                            // API yoksa boş bırak
+                        }
+                        
                         const tr = document.createElement('tr');
+                        const tenantNames = userTenants.map(tid => tenantsMap[tid] || `Grup ${tid}`).join(', ') || 'Grup atanmamış';
                         tr.innerHTML = `
                             <td>${user.id}</td>
                             <td>${user.username}</td>
-                            <td>${user.password || '***'}</td>
-                            <td><span class="badge ${user.role === 'super_admin' ? 'badge-danger' : 'badge-success'}">${user.role === 'super_admin' ? 'Süper Admin' : 'Admin'}</span></td>
+                            <td><strong style="color: #667eea;">${user.password || '***'}</strong></td>
+                            <td>${tenantNames}</td>
                             <td>${user.last_login ? new Date(user.last_login).toLocaleString('tr-TR') : 'Hiç giriş yapmamış'}</td>
                             <td>
-                                <button class="btn btn-primary" onclick="openEditUserModal(${user.id}, '${user.username}', '${user.role}')" style="margin-right: 0.5rem;">Düzenle</button>
+                                <button class="btn btn-primary" onclick="openEditUserModal(${user.id}, '${user.username}', [${userTenants.join(',')}])" style="margin-right: 0.5rem;">Düzenle</button>
                                 <button class="btn btn-danger" onclick="deleteUser(${user.id})">Sil</button>
                             </td>
                         `;
                         tbody.appendChild(tr);
-                    });
+                    }
                     
                     document.getElementById('usersLoading').style.display = 'none';
                     document.getElementById('usersTable').style.display = 'table';
@@ -597,49 +358,51 @@
             }
         }
 
-        async function createTenant(event) {
-            event.preventDefault();
-            const name = document.getElementById('tenantName').value;
+        async function openCreateUserModal() {
+            // Tenant listesini yükle
+            const res = await fetch('/api/super-admin/tenants');
+            const data = await res.json();
             
-            try {
-                const res = await fetch('/api/super-admin/tenants', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({name})
+            const select = document.getElementById('userTenants');
+            select.innerHTML = '';
+            if (data.success) {
+                data.tenants.forEach(tenant => {
+                    const option = document.createElement('option');
+                    option.value = tenant.id;
+                    option.textContent = tenant.name;
+                    select.appendChild(option);
                 });
-                
-                const data = await res.json();
-                if (data.success) {
-                    showToast('Grup oluşturuldu!');
-                    closeModal('createTenantModal');
-                    document.getElementById('tenantName').value = '';
-                    loadTenants();
-                    loadDashboard();
-                } else {
-                    showToast(data.message, 'error');
-                }
-            } catch (error) {
-                showToast('Grup oluşturulurken hata oluştu', 'error');
             }
+            
+            document.getElementById('createUserModal').classList.add('active');
         }
 
         async function createUser(event) {
             event.preventDefault();
             const username = document.getElementById('userUsername').value;
             const password = document.getElementById('userPassword').value;
-            const role = document.getElementById('userRole').value;
             const tenantIds = Array.from(document.getElementById('userTenants').selectedOptions).map(o => parseInt(o.value));
+            
+            if (tenantIds.length === 0) {
+                showToast('Lütfen en az bir grup seçin!', 'error');
+                return;
+            }
             
             try {
                 const res = await fetch('/api/super-admin/users', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({username, password, role, tenant_ids: tenantIds})
+                    body: JSON.stringify({
+                        username, 
+                        password, 
+                        role: 'admin',
+                        tenant_ids: tenantIds
+                    })
                 });
                 
                 const data = await res.json();
                 if (data.success) {
-                    showToast('Kullanıcı oluşturuldu!');
+                    showToast(`Kullanıcı oluşturuldu! Kullanıcı adı: ${username}, Şifre: ${password}`);
                     closeModal('createUserModal');
                     document.getElementById('userUsername').value = '';
                     document.getElementById('userPassword').value = '';
@@ -652,21 +415,70 @@
             }
         }
 
-        async function deleteTenant(id) {
-            if (!confirm('Bu grubu silmek istediğinize emin misiniz? Tüm veriler silinecek!')) return;
+        async function openEditUserModal(userId, username, currentTenantIds) {
+            // Tenant listesini yükle
+            const res = await fetch('/api/super-admin/tenants');
+            const data = await res.json();
+            
+            const select = document.getElementById('editUserTenants');
+            select.innerHTML = '';
+            if (data.success) {
+                data.tenants.forEach(tenant => {
+                    const option = document.createElement('option');
+                    option.value = tenant.id;
+                    option.textContent = tenant.name;
+                    if (currentTenantIds && currentTenantIds.includes(tenant.id)) {
+                        option.selected = true;
+                    }
+                    select.appendChild(option);
+                });
+            }
+            
+            document.getElementById('editUserId').value = userId;
+            document.getElementById('editUserUsername').value = username;
+            document.getElementById('editUserPassword').value = '';
+            document.getElementById('editUserModal').classList.add('active');
+        }
+
+        async function updateUser(event) {
+            event.preventDefault();
+            const userId = document.getElementById('editUserId').value;
+            const username = document.getElementById('editUserUsername').value;
+            const password = document.getElementById('editUserPassword').value;
+            const tenantIds = Array.from(document.getElementById('editUserTenants').selectedOptions).map(o => parseInt(o.value));
+            
+            const updateData = {username};
+            if (password) {
+                updateData.password = password;
+            }
             
             try {
-                const res = await fetch(`/api/super-admin/tenants/${id}`, {method: 'DELETE'});
+                // Önce kullanıcıyı güncelle
+                const res = await fetch(`/api/super-admin/users/${userId}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(updateData)
+                });
+                
                 const data = await res.json();
                 if (data.success) {
-                    showToast('Grup silindi!');
-                    loadTenants();
-                    loadDashboard();
+                    // Sonra grup ilişkilerini güncelle
+                    if (tenantIds.length > 0) {
+                        await fetch(`/api/super-admin/users/${userId}/tenants`, {
+                            method: 'PUT',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({tenant_ids: tenantIds})
+                        });
+                    }
+                    
+                    showToast('Kullanıcı güncellendi!');
+                    closeModal('editUserModal');
+                    loadUsers();
                 } else {
                     showToast(data.message, 'error');
                 }
             } catch (error) {
-                showToast('Grup silinirken hata oluştu', 'error');
+                showToast('Kullanıcı güncellenirken hata oluştu', 'error');
             }
         }
 
@@ -679,110 +491,12 @@
                 if (data.success) {
                     showToast('Kullanıcı silindi!');
                     loadUsers();
-                    loadDashboard();
                 } else {
                     showToast(data.message, 'error');
                 }
             } catch (error) {
                 showToast('Kullanıcı silinirken hata oluştu', 'error');
             }
-        }
-
-        function openEditUserModal(userId, username, role) {
-            document.getElementById('editUserId').value = userId;
-            document.getElementById('editUserUsername').value = username;
-            document.getElementById('editUserRole').value = role;
-            document.getElementById('editUserPassword').value = '';
-            document.getElementById('editUserModal').classList.add('active');
-        }
-
-        async function updateUser(event) {
-            event.preventDefault();
-            const userId = document.getElementById('editUserId').value;
-            const username = document.getElementById('editUserUsername').value;
-            const password = document.getElementById('editUserPassword').value;
-            const role = document.getElementById('editUserRole').value;
-            
-            const updateData = {username, role};
-            if (password) {
-                updateData.password = password;
-            }
-            
-            try {
-                const res = await fetch(`/api/super-admin/users/${userId}`, {
-                    method: 'PUT',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(updateData)
-                });
-                
-                const data = await res.json();
-                if (data.success) {
-                    showToast('Kullanıcı güncellendi!');
-                    closeModal('editUserModal');
-                    loadUsers();
-                } else {
-                    showToast(data.message, 'error');
-                }
-            } catch (error) {
-                showToast('Kullanıcı güncellenirken hata oluştu', 'error');
-            }
-        }
-
-        function viewTenantResults(tenantId) {
-            window.location.href = `/admin/${tenantId}`;
-        }
-
-        async function createUserForTenant(tenantId, tenantName) {
-            // Tenant için otomatik kullanıcı oluştur
-            const username = prompt(`"${tenantName}" grubu için kullanıcı adı girin:`, `user_${tenantId}`);
-            if (!username) return;
-            
-            const password = prompt(`"${tenantName}" grubu için şifre girin:`, `pass_${tenantId}`);
-            if (!password) return;
-            
-            try {
-                const res = await fetch('/api/super-admin/users', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        username: username,
-                        password: password,
-                        role: 'admin',
-                        tenant_ids: [tenantId]
-                    })
-                });
-                
-                const data = await res.json();
-                if (data.success) {
-                    showToast(`Kullanıcı oluşturuldu! Kullanıcı adı: ${username}, Şifre: ${password}`);
-                    loadUsers();
-                } else {
-                    showToast(data.message, 'error');
-                }
-            } catch (error) {
-                showToast('Kullanıcı oluşturulurken hata oluştu', 'error');
-            }
-        }
-
-        function openCreateTenantModal() {
-            document.getElementById('createTenantModal').classList.add('active');
-        }
-
-        async function openCreateUserModal() {
-            // Tenant listesini yükle
-            const res = await fetch('/api/super-admin/tenants');
-            const data = await res.json();
-            
-            const select = document.getElementById('userTenants');
-            select.innerHTML = '';
-            data.tenants.forEach(tenant => {
-                const option = document.createElement('option');
-                option.value = tenant.id;
-                option.textContent = tenant.name;
-                select.appendChild(option);
-            });
-            
-            document.getElementById('createUserModal').classList.add('active');
         }
 
         function closeModal(modalId) {
@@ -795,9 +509,8 @@
             toast.className = `toast ${type} show`;
             setTimeout(() => {
                 toast.classList.remove('show');
-            }, 3000);
+            }, 5000);
         }
     </script>
 </body>
 </html>
-
