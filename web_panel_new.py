@@ -15,7 +15,7 @@ import logging
 import traceback
 from datetime import datetime, timedelta
 from telethon import TelegramClient
-from database import init_db, create_super_admin, SessionLocal, User, Tenant, TenantConfig, Result, MessageStatistics
+from database import init_db, create_super_admin, SessionLocal, User, Tenant, TenantConfig, Result, MessageStatistics, UserTenant
 from auth import login_manager, verify_password, require_super_admin, require_tenant_access
 from tenant_manager import (
     create_tenant, get_tenant, get_tenant_by_slug, get_user_tenants,
@@ -143,10 +143,14 @@ def get_current_tenant_id():
             finally:
                 db.close()
         else:
-            # Normal kullanıcı ise ilk tenant'ını al
-            user_tenants = get_user_tenants(current_user.id)
-            if user_tenants:
-                tenant_id = user_tenants[0].id
+            # Normal kullanıcı için session'dan al
+            tenant_id = session.get('selected_tenant_id')
+            if not tenant_id:
+                # Session'da yoksa ilk tenant'ını al
+                user_tenants = get_user_tenants(current_user.id)
+                if user_tenants:
+                    tenant_id = user_tenants[0].id
+                    session['selected_tenant_id'] = tenant_id
     
     return tenant_id
 
@@ -169,21 +173,72 @@ def get_telegram_client_for_tenant(tenant_id):
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Login sayfası"""
+    """Login sayfası - Normal kullanıcılar için (username, password, tenant seçimi)"""
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
+        tenant_id = request.form.get('tenant_id')
         
+        # Süper admin kontrolü - süper admin ise tenant seçimi olmadan giriş yapabilir
         user = verify_password(username, password)
         if user:
-            login_user(user, remember=True)
-            return redirect(url_for('index'))
+            if user.is_super_admin:
+                # Süper admin direkt super-admin paneline gitsin
+                login_user(user, remember=True)
+                return redirect(url_for('super_admin_dashboard'))
+            else:
+                # Normal kullanıcı için tenant_id gerekli
+                if not tenant_id:
+                    db = SessionLocal()
+                    try:
+                        tenants = db.query(Tenant).filter_by(is_active=True).all()
+                        tenant_list = [{'id': t.id, 'name': t.name} for t in tenants]
+                    finally:
+                        db.close()
+                    return render_template('login.html', error='Lütfen bir grup seçin!', tenants=tenant_list)
+                
+                # Kullanıcının bu tenant'a erişimi var mı?
+                db = SessionLocal()
+                try:
+                    user_tenant = db.query(UserTenant).filter_by(
+                        user_id=user.id,
+                        tenant_id=int(tenant_id)
+                    ).first()
+                    if not user_tenant:
+                        tenants = db.query(Tenant).filter_by(is_active=True).all()
+                        tenant_list = [{'id': t.id, 'name': t.name} for t in tenants]
+                        return render_template('login.html', error='Bu gruba erişim yetkiniz yok!', tenants=tenant_list)
+                finally:
+                    db.close()
+                
+                # Giriş başarılı - tenant_id'yi session'a kaydet
+                login_user(user, remember=True)
+                session['selected_tenant_id'] = int(tenant_id)
+                return redirect(url_for('index'))
         else:
-            return render_template('login.html', error='Kullanıcı adı veya şifre hatalı!')
+            # Hatalı giriş - tenant listesini tekrar göster
+            db = SessionLocal()
+            try:
+                tenants = db.query(Tenant).filter_by(is_active=True).all()
+                tenant_list = [{'id': t.id, 'name': t.name} for t in tenants]
+            finally:
+                db.close()
+            return render_template('login.html', error='Kullanıcı adı veya şifre hatalı!', tenants=tenant_list)
     
     if current_user.is_authenticated:
+        if current_user.is_super_admin:
+            return redirect(url_for('super_admin_dashboard'))
         return redirect(url_for('index'))
-    return render_template('login.html')
+    
+    # GET request - tenant listesini al
+    db = SessionLocal()
+    try:
+        tenants = db.query(Tenant).filter_by(is_active=True).all()
+        tenant_list = [{'id': t.id, 'name': t.name} for t in tenants]
+    finally:
+        db.close()
+    
+    return render_template('login.html', tenants=tenant_list)
 
 @app.route('/logout')
 @login_required
@@ -339,13 +394,20 @@ def list_tenants():
 def create_tenant_api():
     """Yeni tenant oluştur"""
     try:
+        logger.info("📥 POST /api/super-admin/tenants çağrıldı")
         data = request.json
+        logger.info(f"   Request Data: {json.dumps(data, indent=2, ensure_ascii=False)}")
+        
         name = data.get('name', '').strip()
         
         if not name:
+            logger.warning("   ⚠️  Grup adı eksik!")
             return jsonify({'success': False, 'message': 'Grup adı gerekli!'})
         
+        # Tenant oluştur (sadece tenant, user_tenant ilişkisi oluşturma)
         tenant = create_tenant(name, current_user.id)
+        logger.info(f"   ✅ Tenant oluşturuldu: {tenant.id} - {tenant.name}")
+        
         return jsonify({
             'success': True,
             'message': 'Grup başarıyla oluşturuldu!',
@@ -356,6 +418,8 @@ def create_tenant_api():
             }
         })
     except Exception as e:
+        logger.error(f"   ❌ Hata: {str(e)}")
+        logger.error(f"   Traceback: {traceback.format_exc()}")
         return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
 
 @app.route('/api/super-admin/tenants/<int:tenant_id>', methods=['PUT'])
@@ -393,7 +457,7 @@ def delete_tenant_api(tenant_id):
 @login_required
 @require_super_admin
 def list_users():
-    """Tüm kullanıcıları listele"""
+    """Tüm kullanıcıları listele (şifreler dahil)"""
     db = SessionLocal()
     try:
         users = db.query(User).all()
@@ -402,6 +466,7 @@ def list_users():
             'users': [{
                 'id': u.id,
                 'username': u.username,
+                'password': u.password_plain or '***',  # Şifreyi göster (plain text)
                 'role': u.role,
                 'last_login': u.last_login.isoformat() if u.last_login else None,
                 'created_at': u.created_at.isoformat() if u.created_at else None
@@ -436,13 +501,23 @@ def create_user():
             
             # Yeni kullanıcı oluştur
             password_hash = sha256(password.encode()).hexdigest()
-            user = User(username=username, password_hash=password_hash, role=role)
+            user = User(
+                username=username, 
+                password_hash=password_hash, 
+                password_plain=password,  # Şifreyi plain text olarak sakla (sadece super admin görebilir)
+                role=role
+            )
             db.add(user)
-            db.flush()
+            db.flush()  # ID'yi almak için
             
-            # Tenant'lara ekle
+            # Tenant'lara ekle (aynı session içinde, user commit edilmeden önce)
             for tenant_id in tenant_ids:
-                add_user_to_tenant(user.id, tenant_id, role='owner')
+                user_tenant = UserTenant(
+                    user_id=user.id,
+                    tenant_id=tenant_id,
+                    role='owner'
+                )
+                db.add(user_tenant)
             
             db.commit()
             return jsonify({'success': True, 'message': 'Kullanıcı oluşturuldu!'})
@@ -485,6 +560,7 @@ def update_user(user_id):
             if password:
                 password_hash = sha256(password.encode()).hexdigest()
                 user.password_hash = password_hash
+                user.password_plain = password  # Plain text olarak da sakla
             
             # Rol güncelle
             if role:
