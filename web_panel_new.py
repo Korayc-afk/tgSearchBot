@@ -154,8 +154,39 @@ bot_logs = {}  # {tenant_id: [logs]}
 
 def get_current_tenant_id():
     """Mevcut kullanıcının tenant ID'sini al"""
-    tenant_id = request.args.get('tenant_id') or (request.json.get('tenant_id') if request.is_json else None)
+    # Önce request'ten al (args veya json)
+    tenant_id = None
+    try:
+        tenant_id = request.args.get('tenant_id')
+        if tenant_id:
+            try:
+                return int(tenant_id)
+            except (ValueError, TypeError):
+                pass
+    except:
+        pass
     
+    try:
+        if request.is_json and request.json:
+            tenant_id = request.json.get('tenant_id')
+            if tenant_id:
+                try:
+                    return int(tenant_id)
+                except (ValueError, TypeError):
+                    pass
+    except:
+        pass
+    
+    # Request'te yoksa session'dan al
+    if not tenant_id:
+        try:
+            tenant_id = session.get('selected_tenant_id')
+            if tenant_id:
+                return int(tenant_id)
+        except:
+            pass
+    
+    # Session'da da yoksa kullanıcının tenant'larından al
     if not tenant_id:
         if current_user.is_super_admin:
             # Süper admin ise ilk aktif tenant'ı al
@@ -164,17 +195,15 @@ def get_current_tenant_id():
                 first_tenant = db.query(Tenant).filter_by(is_active=True).first()
                 if first_tenant:
                     tenant_id = first_tenant.id
+                    session['selected_tenant_id'] = tenant_id
             finally:
                 db.close()
         else:
-            # Normal kullanıcı için session'dan al
-            tenant_id = session.get('selected_tenant_id')
-            if not tenant_id:
-                # Session'da yoksa ilk tenant'ını al
-                user_tenants = get_user_tenants(current_user.id)
-                if user_tenants:
-                    tenant_id = user_tenants[0].id
-                    session['selected_tenant_id'] = tenant_id
+            # Normal kullanıcı için ilk tenant'ını al
+            user_tenants = get_user_tenants(current_user.id)
+            if user_tenants:
+                tenant_id = user_tenants[0].id
+                session['selected_tenant_id'] = tenant_id
     
     return tenant_id
 
@@ -1189,12 +1218,26 @@ def telegram_login(tenant_id):
                     pass
                 return {'success': False, 'message': f'Hata: {error_msg}'}
         
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        # Event loop sorununu çöz - thread-safe event loop kullan
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
         try:
             result = loop.run_until_complete(handle_login())
         finally:
-            loop.close()
+            # Loop'u kapatma, sadece temizle
+            try:
+                pending = asyncio.all_tasks(loop)
+                for task in pending:
+                    task.cancel()
+            except:
+                pass
         
         return jsonify(result)
     except Exception as e:
@@ -1706,12 +1749,26 @@ def test_telegram_legacy():
                 logger.error(f"   ❌ Telegram test hatası: {str(e)}")
                 return {'success': False, 'message': f'Hata: {str(e)}'}
         
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        # Event loop sorununu çöz - thread-safe event loop kullan
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
         try:
             result = loop.run_until_complete(test())
         finally:
-            loop.close()
+            # Loop'u kapatma, sadece temizle
+            try:
+                pending = asyncio.all_tasks(loop)
+                for task in pending:
+                    task.cancel()
+            except:
+                pass
         
         return jsonify(result)
     except Exception as e:

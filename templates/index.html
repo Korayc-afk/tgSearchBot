@@ -1038,38 +1038,7 @@
                 }
                 
                 // Direkt SMS gönder (login modalını aç ve kod gönder)
-                document.getElementById('login-phone').value = phoneNumber;
-                showLoginModal();
-                
-                // Otomatik kod gönder
-                setTimeout(async () => {
-                    try {
-                        const statusDiv = document.getElementById('login-status');
-                        statusDiv.innerHTML = '<div class="loading">📱 SMS kodu gönderiliyor...</div>';
-                        
-                        const response = await fetch('/api/telegram-login', {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({action: 'send_code', phone: phoneNumber})
-                        });
-                        
-                        const data = await response.json();
-                        
-                        if (data.success) {
-                            codeSent = true;
-                            document.getElementById('code-section').style.display = 'block';
-                            statusDiv.innerHTML = '<div class="alert alert-success">✅ SMS kodu gönderildi! Telefonunuza gelen kodu girin.</div>';
-                            showToast('✅ SMS kodu gönderildi! Telefonunuza gelen kodu girin.', 'success');
-                        } else {
-                            statusDiv.innerHTML = `<div class="alert alert-error">❌ ${data.message}</div>`;
-                            showToast(`❌ SMS gönderilemedi: ${data.message}`, 'error');
-                        }
-                    } catch (error) {
-                        const statusDiv = document.getElementById('login-status');
-                        statusDiv.innerHTML = `<div class="alert alert-error">❌ Hata: ${error.message}</div>`;
-                        showToast(`❌ SMS gönderme hatası: ${error.message}`, 'error');
-                    }
-                }, 500);
+                showLoginModal(phoneNumber);
                 
             } catch (error) {
                 showToast(`❌ Hata: ${error.message}`, 'error');
@@ -2078,13 +2047,24 @@
         let codeSent = false;
         let needsPassword = false;
         
-        function showLoginModal() {
+        function showLoginModal(phoneNumber = null) {
             document.getElementById('login-modal').style.display = 'flex';
             document.getElementById('login-main-form').style.display = 'block';
             document.getElementById('code-section').style.display = 'none';
             document.getElementById('password-section').style.display = 'none';
             document.getElementById('login-status').innerHTML = '';
-            document.getElementById('login-phone').value = '';
+            
+            // Telefon numarası varsa otomatik doldur
+            if (phoneNumber) {
+                document.getElementById('login-phone').value = phoneNumber;
+                // Otomatik kod gönder
+                setTimeout(() => {
+                    autoSendCode();
+                }, 300);
+            } else {
+                document.getElementById('login-phone').value = '';
+            }
+            
             document.getElementById('login-code').value = '';
             document.getElementById('login-password').value = '';
             document.getElementById('login-btn').innerHTML = 'Giriş Yap';
