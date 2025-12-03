@@ -361,9 +361,12 @@ def index():
 
 @app.route('/super-admin')
 @login_required
-@require_super_admin
 def super_admin_dashboard():
     """Süper admin dashboard"""
+    # Normal admin kullanıcısını ana sayfaya yönlendir
+    if not current_user.is_super_admin:
+        logger.warning(f"   ⚠️  Normal admin kullanıcısı {current_user.username} (ID: {current_user.id}) /super-admin sayfasına erişmeye çalıştı, ana sayfaya yönlendiriliyor")
+        return redirect(url_for('index'))
     return render_template('super_admin.html')
 
 @app.route('/admin/<int:tenant_id>')

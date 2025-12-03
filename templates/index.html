@@ -678,7 +678,7 @@
                     
                     <div id="login-main-form">
                         <p style="margin-bottom: 15px; color: #666;">Telefon numaranızı girin, kod otomatik gönderilecektir.</p>
-                        <input type="text" id="login-phone" placeholder="+90XXXXXXXXXX" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box;" onblur="autoSendCode()">
+                        <input type="text" id="login-phone" placeholder="+90XXXXXXXXXX" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box;">
                         
                         <div id="code-section" style="display: none;">
                             <p style="margin-bottom: 10px; color: #666; font-size: 14px;">Telefon numaranıza gönderilen kodu girin:</p>
@@ -2078,15 +2078,18 @@
             needsPassword = false;
         }
         
-        // Telefon numarası girildiğinde otomatik kod gönder
+        // Telefon numarası girildiğinde otomatik kod gönder (duplicate önleme ile)
+        let sendingCode = false; // Duplicate önleme flag'i
         async function autoSendCode() {
             const phone = document.getElementById('login-phone').value.trim();
             const statusDiv = document.getElementById('login-status');
             
-            if (!phone || phone.length < 10 || codeSent) {
+            // Duplicate önleme
+            if (!phone || phone.length < 10 || codeSent || sendingCode) {
                 return;
             }
             
+            sendingCode = true; // Flag'i set et
             statusDiv.innerHTML = '<div class="loading">Kod gönderiliyor...</div>';
             
             try {
@@ -2104,9 +2107,13 @@
                     statusDiv.innerHTML = '<div class="alert alert-success">✅ Kod gönderildi! Kodu girin ve "Giriş Yap" butonuna tıklayın.</div>';
                 } else {
                     statusDiv.innerHTML = `<div class="alert alert-error">❌ ${data.message}</div>`;
+                    codeSent = false; // Hata durumunda tekrar denemeye izin ver
                 }
             } catch (error) {
                 statusDiv.innerHTML = `<div class="alert alert-error">❌ Hata: ${error.message}</div>`;
+                codeSent = false; // Hata durumunda tekrar denemeye izin ver
+            } finally {
+                sendingCode = false; // Flag'i reset et
             }
         }
         
