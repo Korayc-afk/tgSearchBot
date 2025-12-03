@@ -1049,6 +1049,200 @@ def export_results(tenant_id):
     except Exception as e:
         return jsonify({'success': False, 'message': f'Hata: {str(e)}'}), 500
 
+# ==================== LEGACY API ROUTES (index.html için) ====================
+# Bu route'lar eski index.html ile uyumluluk için
+# Tenant ID otomatik olarak belirlenir
+
+@app.route('/api/config', methods=['GET'])
+@login_required
+def get_config_api_legacy():
+    """Config'i getir (eski format)"""
+    tenant_id = get_current_tenant_id()
+    if not tenant_id:
+        return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
+    
+    config = get_tenant_config(tenant_id)
+    if not config:
+        return jsonify({'success': False, 'message': 'Config bulunamadı!'})
+    
+    # Eski format
+    return jsonify({
+        'API_ID': config.api_id or '',
+        'API_HASH': '***' if config.api_hash_encrypted else '',
+        'PHONE_NUMBER': config.phone_number or '',
+        'GROUP_IDS': config.group_ids or [],
+        'SEARCH_KEYWORDS': config.search_keywords or [],
+        'SEARCH_LINKS': config.search_links or [],
+        'SCAN_TIME_RANGE': config.scan_time_range or '7days'
+    })
+
+@app.route('/api/config', methods=['POST'])
+@login_required
+def save_config_api_legacy():
+    """Config'i kaydet (eski format)"""
+    tenant_id = get_current_tenant_id()
+    if not tenant_id:
+        return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
+    
+    try:
+        data = request.json
+        update_data = {}
+        
+        if 'API_ID' in data:
+            update_data['api_id'] = data['API_ID']
+        if 'API_HASH' in data and data['API_HASH'] != '***':
+            update_data['api_hash'] = data['API_HASH']
+        if 'PHONE_NUMBER' in data:
+            update_data['phone_number'] = data['PHONE_NUMBER']
+        if 'GROUP_IDS' in data:
+            update_data['group_ids'] = data['GROUP_IDS']
+        if 'SEARCH_KEYWORDS' in data:
+            update_data['search_keywords'] = [kw.strip() for kw in data['SEARCH_KEYWORDS'] if kw.strip()]
+        if 'SEARCH_LINKS' in data:
+            update_data['search_links'] = [link.strip() for link in data['SEARCH_LINKS'] if link.strip()]
+        if 'SCAN_TIME_RANGE' in data:
+            update_data['scan_time_range'] = data['SCAN_TIME_RANGE']
+        
+        config = update_tenant_config(tenant_id, **update_data)
+        if config:
+            return jsonify({'success': True, 'message': 'Ayarlar kaydedildi!'})
+        else:
+            return jsonify({'success': False, 'message': 'Config bulunamadı!'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
+
+@app.route('/api/groups', methods=['GET'])
+@login_required
+def get_groups_legacy():
+    """Telegram gruplarını listele (eski format)"""
+    tenant_id = get_current_tenant_id()
+    if not tenant_id:
+        return jsonify({'success': False, 'message': 'Tenant bulunamadı!', 'groups': []})
+    
+    return get_telegram_groups(tenant_id)
+
+@app.route('/api/groups/search', methods=['POST'])
+@login_required
+def search_groups_legacy():
+    """Telegram'da grup ara (eski format)"""
+    tenant_id = get_current_tenant_id()
+    if not tenant_id:
+        return jsonify({'success': False, 'message': 'Tenant bulunamadı!', 'groups': []})
+    
+    return search_telegram_groups(tenant_id)
+
+@app.route('/api/groups/add-by-username', methods=['POST'])
+@login_required
+def add_group_by_username_legacy():
+    """Username'den grup ekle (eski format)"""
+    tenant_id = get_current_tenant_id()
+    if not tenant_id:
+        return jsonify({'success': False, 'message': 'Tenant bulunamadı!', 'group': None})
+    
+    return add_group_by_username(tenant_id)
+
+@app.route('/api/results', methods=['GET'])
+@login_required
+def get_results_legacy():
+    """Sonuçları al (eski format)"""
+    tenant_id = get_current_tenant_id()
+    if not tenant_id:
+        return jsonify({'success': False, 'message': 'Tenant bulunamadı!', 'results': []})
+    
+    return get_results_api(tenant_id)
+
+@app.route('/api/results/clear', methods=['POST'])
+@login_required
+def clear_results_legacy():
+    """Sonuçları temizle (eski format)"""
+    tenant_id = get_current_tenant_id()
+    if not tenant_id:
+        return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
+    
+    try:
+        db = SessionLocal()
+        try:
+            db.query(Result).filter_by(tenant_id=tenant_id).delete()
+            db.commit()
+            return jsonify({'success': True, 'message': 'Sonuçlar temizlendi!'})
+        except Exception as e:
+            db.rollback()
+            return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
+        finally:
+            db.close()
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
+
+@app.route('/api/telegram-login', methods=['POST'])
+@login_required
+def telegram_login_legacy():
+    """Telegram'a giriş yap (eski format)"""
+    tenant_id = get_current_tenant_id()
+    if not tenant_id:
+        return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
+    
+    return telegram_login(tenant_id)
+
+@app.route('/api/scan', methods=['POST'])
+@login_required
+def start_scan_legacy():
+    """Tarama başlat (eski format)"""
+    tenant_id = get_current_tenant_id()
+    if not tenant_id:
+        return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
+    
+    return start_scan_api(tenant_id)
+
+@app.route('/api/scan-status', methods=['GET'])
+@login_required
+def get_scan_status_legacy():
+    """Tarama durumunu al (eski format)"""
+    tenant_id = get_current_tenant_id()
+    if not tenant_id:
+        return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
+    
+    return get_scan_status_api(tenant_id)
+
+@app.route('/api/test-telegram', methods=['POST'])
+@login_required
+def test_telegram_legacy():
+    """Telegram API testi (eski format)"""
+    tenant_id = get_current_tenant_id()
+    if not tenant_id:
+        return jsonify({'success': False, 'message': 'Tenant bulunamadı!'})
+    
+    try:
+        client = get_telegram_client_for_tenant(tenant_id)
+        if not client:
+            return jsonify({'success': False, 'message': 'API bilgileri eksik!'})
+        
+        async def test():
+            try:
+                await client.connect()
+                if await client.is_user_authorized():
+                    await client.disconnect()
+                    return {'success': True, 'message': 'Telegram bağlantısı başarılı!'}
+                else:
+                    await client.disconnect()
+                    return {'success': False, 'message': 'Telegram girişi yapılmamış!'}
+            except Exception as e:
+                try:
+                    await client.disconnect()
+                except:
+                    pass
+                return {'success': False, 'message': f'Hata: {str(e)}'}
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(test())
+        finally:
+            loop.close()
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Hata: {str(e)}'})
+
 if __name__ == '__main__':
     # Database'i başlat
     print("🔧 Database başlatılıyor...")
