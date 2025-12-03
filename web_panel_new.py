@@ -1785,9 +1785,57 @@ def telegram_login_legacy():
         if session_dir and not os.path.exists(session_dir):
             os.makedirs(session_dir, exist_ok=True)
         
-        client = TelegramClient(session_name, config.api_id, config.get_api_hash())
+        # Event loop'u TelegramClient oluşturulmadan önce ayarla
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        # SQLite session lock sorununu önlemek için retry mekanizması
+        import threading
+        
+        # Global session locks dictionary (her tenant için ayrı lock)
+        if not hasattr(telegram_login_legacy, '_session_locks'):
+            telegram_login_legacy._session_locks = {}
+        
+        lock_key = f"session_{tenant_id}"
+        if lock_key not in telegram_login_legacy._session_locks:
+            telegram_login_legacy._session_locks[lock_key] = threading.Lock()
+        session_lock = telegram_login_legacy._session_locks[lock_key]
         
         async def handle_login():
+            # Client'ı async fonksiyon içinde oluştur
+            client = None
+            max_retries = 3
+            retry_delay = 0.5
+            
+            for attempt in range(max_retries):
+                try:
+                    # Session dosyasına erişim için lock kullan
+                    with session_lock:
+                        # Kısa bir bekleme (lock çakışmasını önlemek için)
+                        await asyncio.sleep(0.1)
+                        
+                        # Event loop içinde TelegramClient oluştur
+                        client = TelegramClient(session_name, config.api_id, config.get_api_hash())
+                        break  # Başarılı, döngüden çık
+                except Exception as e:
+                    error_msg = str(e)
+                    if 'database is locked' in error_msg.lower() and attempt < max_retries - 1:
+                        logger.warning(f"   ⚠️  Session locked, retry {attempt + 1}/{max_retries}...")
+                        await asyncio.sleep(retry_delay * (attempt + 1))
+                        continue
+                    else:
+                        logger.error(f"   ❌ TelegramClient oluşturma hatası: {str(e)}")
+                        return {'success': False, 'message': f'Client oluşturma hatası: {str(e)}'}
+            
+            if client is None:
+                return {'success': False, 'message': 'Client oluşturulamadı!'}
+            
             try:
                 await client.connect()
                 
@@ -1882,23 +1930,16 @@ def telegram_login_legacy():
                     pass
                 return {'success': False, 'message': f'Hata: {error_msg}'}
         
-        # Event loop sorununu çöz
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_closed():
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
+        # Event loop'u zaten yukarıda ayarladık, şimdi kullan
         try:
             result = loop.run_until_complete(handle_login())
         finally:
             try:
+                # Pending task'ları temizle
                 pending = asyncio.all_tasks(loop)
                 for task in pending:
                     task.cancel()
+                # Loop'u kapatma, sadece temizle
             except:
                 pass
         
