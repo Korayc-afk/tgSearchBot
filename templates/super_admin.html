@@ -548,7 +548,8 @@
                             <td><span class="badge ${tenant.is_active ? 'badge-success' : 'badge-danger'}">${tenant.is_active ? 'Aktif' : 'Pasif'}</span></td>
                             <td>${new Date(tenant.created_at).toLocaleDateString('tr-TR')}</td>
                             <td>
-                                <button class="btn btn-primary" onclick="viewTenantResults(${tenant.id})">Sonuçlar</button>
+                                <button class="btn btn-primary" onclick="createUserForTenant(${tenant.id}, '${tenant.name}')" style="margin-right: 0.5rem;">Kullanıcı Oluştur</button>
+                                <button class="btn btn-primary" onclick="viewTenantResults(${tenant.id})" style="margin-right: 0.5rem;">Sonuçlar</button>
                                 <button class="btn btn-danger" onclick="deleteTenant(${tenant.id})">Sil</button>
                             </td>
                         `;
@@ -729,6 +730,38 @@
 
         function viewTenantResults(tenantId) {
             window.location.href = `/admin/${tenantId}`;
+        }
+
+        async function createUserForTenant(tenantId, tenantName) {
+            // Tenant için otomatik kullanıcı oluştur
+            const username = prompt(`"${tenantName}" grubu için kullanıcı adı girin:`, `user_${tenantId}`);
+            if (!username) return;
+            
+            const password = prompt(`"${tenantName}" grubu için şifre girin:`, `pass_${tenantId}`);
+            if (!password) return;
+            
+            try {
+                const res = await fetch('/api/super-admin/users', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        username: username,
+                        password: password,
+                        role: 'admin',
+                        tenant_ids: [tenantId]
+                    })
+                });
+                
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`Kullanıcı oluşturuldu! Kullanıcı adı: ${username}, Şifre: ${password}`);
+                    loadUsers();
+                } else {
+                    showToast(data.message, 'error');
+                }
+            } catch (error) {
+                showToast('Kullanıcı oluşturulurken hata oluştu', 'error');
+            }
         }
 
         function openCreateTenantModal() {

@@ -90,10 +90,21 @@ def require_tenant_access(tenant_id_param='tenant_id'):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            # Tenant ID'yi al
-            tenant_id = kwargs.get(tenant_id_param) or request.args.get('tenant_id') or request.json.get('tenant_id') if request.is_json else None
+            # Tenant ID'yi al - önce kwargs'tan, sonra request'ten
+            tenant_id = kwargs.get(tenant_id_param)
+            if tenant_id is None:
+                tenant_id = request.args.get('tenant_id')
+            if tenant_id is None and request.is_json:
+                tenant_id = request.json.get('tenant_id')
             
-            if not tenant_id:
+            # Integer'a çevir
+            if tenant_id is not None:
+                try:
+                    tenant_id = int(tenant_id)
+                except (ValueError, TypeError):
+                    tenant_id = None
+            
+            if tenant_id is None:
                 abort(400)
             
             # Süper admin ise geç

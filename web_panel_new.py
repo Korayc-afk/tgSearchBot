@@ -374,16 +374,22 @@ def list_tenants():
     db = SessionLocal()
     try:
         tenants = db.query(Tenant).all()
-        return jsonify({
-            'success': True,
-            'tenants': [{
+        tenant_list = []
+        for t in tenants:
+            # Her tenant için sonuç sayısını hesapla
+            result_count = db.query(Result).filter_by(tenant_id=t.id).count()
+            tenant_list.append({
                 'id': t.id,
                 'name': t.name,
                 'slug': t.slug,
                 'is_active': t.is_active,
                 'created_at': t.created_at.isoformat() if t.created_at else None,
-                'created_by': t.created_by
-            } for t in tenants]
+                'created_by': t.created_by,
+                'result_count': result_count
+            })
+        return jsonify({
+            'success': True,
+            'tenants': tenant_list
         })
     finally:
         db.close()
